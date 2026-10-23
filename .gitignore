@@ -1,17 +1,4 @@
-# build output
-MloCreator.exe
-MloCreator.*.exe
-MloCreator.exe.config
-dist/
-
-# release folder (contains built program)
-!release/
-
-# libraries (see lib/README.md)
-lib/*
-!lib/README.md
-
-# per-user data the program creates next to itself
+# per-user data the program creates next to itself (not the release build)
 projects/
 output/
 Exports/
@@ -24,3 +11,6 @@ settings.json
 .vscode/
 Thumbs.db
 desktop.ini
+
+# source code folder (always track)
+!source/
