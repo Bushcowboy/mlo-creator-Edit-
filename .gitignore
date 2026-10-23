@@ -1,0 +1,23 @@
+# build output
+MloCreator.exe
+MloCreator.*.exe
+MloCreator.exe.config
+dist/
+
+# libraries (see lib/README.md)
+lib/*
+!lib/README.md
+
+# per-user data the program creates next to itself
+projects/
+output/
+Exports/
+cache/
+logs/
+settings.json
+
+# editor / OS
+.vs/
+.vscode/
+Thumbs.db
+desktop.ini
