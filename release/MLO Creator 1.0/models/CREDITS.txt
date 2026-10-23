@@ -1,0 +1,22 @@
+Models that come with MLO Creator
+=================================
+
+These three .glb files are listed in the Window / door models tool of every project ("built in"). They are other people's work, used under their licences.
+When you place one in an interior, MLO Creator writes the credit and licence into the README of the exported resource.
+
+animated_window_systems.glb  -  "Animated Window Systems"
+    by makinwhat (https://sketchfab.com/makinwhat)
+    Licence: CC BY-NC 4.0 (http://creativecommons.org/licenses/by-nc/4.0/)  -  NON-COMMERCIAL use only, credit required
+    Source: https://sketchfab.com/3d-models/animated-window-systems-ffa9e879cdd04c3ba49d894f2f2ef5d3
+
+door_wooden_old-18mb.glb  -  "Door Wooden Old-18MB"
+    by Mehdi Shahsavan (https://sketchfab.com/ahmagh2e)
+    Licence: CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/)  -  credit required
+    Source: https://sketchfab.com/3d-models/door-wooden-old-18mb-d2709483c3e644ed8d3aaa4998b5a47c
+
+door_frame.glb  -  "Door Frame"
+    by CrIsTaL (https://sketchfab.com/ArterLayll)
+    Licence: CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/)  -  credit required
+    Source: https://sketchfab.com/3d-models/door-frame-c91101537bef410f98c67895746ec407
+
+Check each licence before you use a resource made with them on a server that earns money. A project with a .glb of the same name in its own files uses that one instead.

@@ -4,6 +4,9 @@ MloCreator.*.exe
 MloCreator.exe.config
 dist/
 
+# release folder (contains built program)
+!release/
+
 # libraries (see lib/README.md)
 lib/*
 !lib/README.md

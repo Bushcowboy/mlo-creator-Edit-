@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="mlo-token" content="__TOKEN__">
+<title>MLO Creator</title>
+<link rel="icon" type="image/png" href="logo.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="gl"></canvas>
+  <div id="hudlabel"></div>
+
+  <header id="top">
+    <div class="brand"><img src="logo.png" alt="" width="24" height="24">MLO<span>Creator</span></div>
+    <div class="pname"><input id="projname" spellcheck="false" maxlength="60" title="Project name"><span id="savestate"></span></div>
+    <nav id="tabs"></nav>
+    <div class="actions">
+      <button class="btn icon" id="b-undo" title="Undo (Ctrl+Z)">Undo</button>
+      <button class="btn icon" id="b-redo" title="Redo (Ctrl+Y)">Redo</button>
+      <button class="btn" id="b-save" title="Save the project now (Ctrl+S). It also saves by itself.">Save</button>
+      <button class="btn" id="b-new" title="Start a new project">New project</button>
+      <button class="btn" id="b-projects">Projects</button>
+      <button class="btn primary" id="b-export">Export</button>
+    </div>
+  </header>
+
+  <aside id="left" class="panel"></aside>
+  <aside id="right" class="panel"></aside>
+  <section id="bench" class="panel"></section>
+
+  <div id="keys"></div>
+  <div id="status"><span id="hint"></span><span id="stats"></span></div>
+  <button id="helpbtn" class="btn">Help <kbd>F1</kbd></button>
+  <div id="toasts"></div>
+  <div id="modal" hidden></div>
+</div>
+<script src="js/errors.js"></script>
+<script src="js/util.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/mesher.js"></script>
+<script src="js/render.js"></script>
+<script src="js/model.js"></script>
+<script src="js/tools.js"></script>
+<script src="js/shell.js"></script>
+<script src="js/shelltools.js"></script>
+<script src="js/importmodel.js"></script>
+<script src="js/importtools.js"></script>
+<script src="js/fitmodels.js"></script>
+<script src="js/plants.js"></script>
+<script src="js/walk.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/vanillaui.js"></script>
+<script src="js/importui.js"></script>
+<script src="js/figure.js"></script>
+<script src="js/hints.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
