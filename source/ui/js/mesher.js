@@ -90,13 +90,13 @@ window.MLO = window.MLO || {};
             const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
             let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
             const l = Math.hypot(nx, ny, nz); if (l < 1e-12) return; nx /= l; ny /= l; nz /= l;
-            const tile = glass ? 1 : TEX.tile(tex), ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz);
+            const tile = glass ? 1 : TEX.tile(tex), tv = glass ? 1 : TEX.tileV(tex), ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz);
             const base = m.pos.length / 3;
             [a, b, c, d].forEach(p => {
                 m.pos.push(p[0], p[1], p[2]); m.nrm.push(nx, ny, nz);
-                if (ax >= ay && ax >= az) m.uv.push(p[1] / tile, -p[2] / tile);
-                else if (ay >= ax && ay >= az) m.uv.push(p[0] / tile, -p[2] / tile);
-                else m.uv.push(p[0] / tile, p[1] / tile);
+                if (ax >= ay && ax >= az) m.uv.push(p[1] / tile, -p[2] / tv);
+                else if (ay >= ax && ay >= az) m.uv.push(p[0] / tile, -p[2] / tv);
+                else m.uv.push(p[0] / tile, p[1] / tv);
                 for (let q = 0; q < 3; q++) { if (p[q] < bmn[q]) bmn[q] = p[q]; if (p[q] > bmx[q]) bmx[q] = p[q]; }
             });
             m.idx.push(base, base + 1, base + 2, base + 2, base + 3, base);
@@ -405,7 +405,8 @@ window.MLO = window.MLO || {};
             const off = m.pos.length / 3;
             for (let i = 0; i < b.pos.length; i++) m.pos.push(b.pos[i]);
             for (let i = 0; i < b.nrm.length; i++) m.nrm.push(b.nrm[i]);
-            for (let i = 0; i < b.uv.length; i++) m.uv.push(b.uv[i] * uvk);
+            const ku = Array.isArray(uvk) ? uvk[0] : uvk, kv = Array.isArray(uvk) ? uvk[1] : uvk;
+            for (let i = 0; i < b.uv.length; i++) m.uv.push(b.uv[i] * (i % 2 ? kv : ku));
             for (let i = 0; i < b.idx.length; i++) m.idx.push(b.idx[i] + off);
             if (!b.glass) usedTex.add(tex);
         };
@@ -417,7 +418,7 @@ window.MLO = window.MLO || {};
         built.batches.forEach(b => {
             if (vars.length && b.group === 'int' && !b.glass && swapped.has(b.tex)) {
                 add('pnt0', b, b.tex, 1);
-                vars.forEach((v, i) => { const t = v.swap[b.tex] && TEX.byId[v.swap[b.tex]] ? v.swap[b.tex] : b.tex; add('pnt' + (i + 1), b, t, TEX.tile(b.tex) / TEX.tile(t)); });       // (the new texture repeats at its own size)
+                vars.forEach((v, i) => { const t = v.swap[b.tex] && TEX.byId[v.swap[b.tex]] ? v.swap[b.tex] : b.tex; add('pnt' + (i + 1), b, t, [TEX.tile(b.tex) / TEX.tile(t), TEX.tileV(b.tex) / TEX.tileV(t)]); });       // (the new texture repeats at its own size)
             } else add(b.group, b, b.tex, 1);
         });
         const L = extra.light || {};
@@ -454,11 +455,17 @@ window.MLO = window.MLO || {};
         // collision triangles (sloped ceilings, gable ends): three corners and a material each
         const ct = built.colTris || [];
         for (let i = 0; i + 9 < ct.length; i += 10) { const v = verts.length / 3; verts.push(ct[i], ct[i + 1], ct[i + 2], ct[i + 3], ct[i + 4], ct[i + 5], ct[i + 6], ct[i + 7], ct[i + 8]); tris.push(v, v + 1, v + 2, ct[i + 9]); }
-        const textures = [];
+        const textures = [], projName = (M.Model && M.Model.safeName) ? M.Model.safeName(project.name) : project.name;
         [...usedTex].forEach(id => {
-            const t = TEX.pixels(id), b64 = (a) => M.toB64(new Uint8Array(a.buffer, a.byteOffset, a.byteLength));
-            textures.push({ name: id, size: t.size, rgba: b64(t.data) });
-            if (nm) { const mp = TEX.maps(id, look.flipGreen); textures.push({ name: id + '_n', size: mp.size, rgba: b64(mp.normal), usage: 'NORMAL' }, { name: id + '_s', size: mp.size, rgba: b64(mp.spec), usage: 'SPECULAR' }); }
+            const t = TEX.pixels(id), b64 = (a) => M.toB64(new Uint8Array(a.buffer, a.byteOffset, a.byteLength)), d = TEX.byId[id];
+            // a texture of the imported model: the host copies the picture itself (and its own normal and specular maps) from your files; the preview is the stand-in
+            const own = d && d.kind === 'model', tx = { name: id, size: t.size, rgba: b64(t.data) };
+            if (own) { tx.model = { project: projName, tex: d.src, max: look.modelTexMax || 1024 }; if (nm && d.normal) { tx.model.normal = d.normal; if (d.spec) tx.model.spec = d.spec; } }
+            textures.push(tx);
+            if (nm) {
+                const mp = TEX.maps(id, look.flipGreen), fb = own && !!d.normal;          // (maps made from the picture: only used when the model's own do not come)
+                textures.push({ name: id + '_n', size: mp.size, rgba: b64(mp.normal), usage: 'NORMAL', fallback: fb || undefined }, { name: id + '_s', size: mp.size, rgba: b64(mp.spec), usage: 'SPECULAR', fallback: fb || undefined });
+            }
         });
         const out = Object.assign({
             groups: outGroups,

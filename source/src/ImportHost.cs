@@ -18,6 +18,7 @@ namespace MloCreator
         static Dictionary<string, ModelDoc> docs = new Dictionary<string, ModelDoc>();
 
         public static void Init(string projectsDir, string cache) { projDir = projectsDir; cacheDir = cache; Directory.CreateDirectory(cache); }
+        public static string CacheDir { get { return cacheDir; } }
         public static string FilesDir(string project) { return Path.Combine(projDir, project + ".files"); }
         // The models that come with the program (.glb windows, door and frame in the "models" folder next to it): every project has them, the project's own files of the same name win.
         public static string ModelsDir;
@@ -196,17 +197,18 @@ namespace MloCreator
             }
             ushort[] ix = new ushort[Idx.Length]; for (int i = 0; i < ix.Length; i++) ix[i] = (ushort)Idx[i];
             Dictionary<string, object> d = new Dictionary<string, object>();
-            d["g"] = no; d["tex"] = g.Tex; d["shader"] = g.ShaderName; d["bucket"] = g.Bucket; d["tris"] = Idx.Length / 3;
+            d["g"] = no; d["tex"] = g.Tex; d["shader"] = g.ShaderName; d["bucket"] = g.Bucket; d["tris"] = Idx.Length / 3; d["bump"] = g.Bump; d["spec"] = g.Spec;
             d["pos"] = B64(p); d["nrm"] = B64(n); d["uv"] = B64(uv); d["idx"] = B64(ix);
             return d;
         }
 
-        static Dictionary<string, object> TexJson(string name, Texture t)
+        static Dictionary<string, object> TexJson(string name, Texture t) { return TexJson(name, t, 256); }
+        static Dictionary<string, object> TexJson(string name, Texture t, int max)
         {
             try
             {
                 int w = t.Width, h = t.Height, mip = 0; int levels = Math.Max(1, (int)t.Levels);
-                while ((w >> mip) > 256 && mip < levels - 1) mip++;
+                while (Math.Max(w >> mip, h >> mip) > max && mip < levels - 1) mip++;
                 int mw = Math.Max(1, w >> mip), mh = Math.Max(1, h >> mip);
                 byte[] px = CodeWalker.Utils.DDSIO.GetPixels(t, mip); if (px == null || px.Length < mw * mh * 4) return null;
                 byte[] rgba = new byte[mw * mh * 4];
@@ -235,9 +237,44 @@ namespace MloCreator
                 }
                 m["geoms"] = gl; m["bmin"] = mn; m["bmax"] = mx; m["tris"] = tris; models.Add(m);
             }
-            // textures: imported .ytd files first, then the ones stored inside the models
+            // textures: imported .ytd files first, then the ones stored inside the models (the biggest copy of a name wins)
+            Dictionary<string, ProjTex> all = ProjectTextures(project, log);
             Dictionary<string, Dictionary<string, object>> found = new Dictionary<string, Dictionary<string, object>>();
-            foreach (string f in Directory.Exists(dir) ? Directory.GetFiles(dir, "*.ytd") : new string[0])
+            foreach (string k in wanted) { ProjTex t; if (!all.TryGetValue(k, out t)) continue; Dictionary<string, object> tj = TexJson(k, t.T); if (tj != null) found[k] = tj; }
+            // how the model uses each of its textures, for painting the interior with them (Paint tab, "From the model")
+            Dictionary<string, TexUse> uses = TexUses(project, models.Count > 0 ? dir : null);
+            List<object> info = new List<object>();
+            foreach (KeyValuePair<string, TexUse> kv in uses) { if (!found.ContainsKey(kv.Key)) continue; info.Add(TexInfoJson(kv.Value, all)); }
+            // the other pictures of the imported texture files (not on the model, not normal or specular maps): smaller previews, at most 48
+            int extra = 0;
+            foreach (KeyValuePair<string, ProjTex> kv in all)
+            {
+                if (extra >= 48 || found.ContainsKey(kv.Key) || !kv.Value.FromYtd || IsMapName(kv.Key, kv.Value.T)) continue;
+                bool isMap = false; foreach (TexUse u in uses.Values) if (u.Bump == kv.Key || u.Spec == kv.Key) { isMap = true; break; } if (isMap) continue;
+                Dictionary<string, object> tj = TexJson(kv.Key, kv.Value.T, 128); if (tj == null) continue; found[kv.Key] = tj; extra++;
+                TexUse tu = new TexUse(); tu.Name = kv.Key; ProjTex nt; if (all.TryGetValue(kv.Key + "_n", out nt)) tu.Bump = kv.Key + "_n"; if (all.TryGetValue(kv.Key + "_s", out nt)) tu.Spec = kv.Key + "_s";
+                info.Add(TexInfoJson(tu, all));
+            }
+            foreach (KeyValuePair<string, Dictionary<string, object>> kv in found) texList.Add(kv.Value);
+            res["models"] = models; res["textures"] = texList; res["texInfo"] = info; res["files"] = List(project); res["entities"] = Entities(project, target, log);
+            return res;
+        }
+
+        // ---------- the project's textures (imported .ytd files, and the ones stored inside the models) ----------
+        public class ProjTex { public Texture T; public bool FromYtd; public string File; }
+        static readonly Dictionary<string, KeyValuePair<string, Dictionary<string, ProjTex>>> texCache = new Dictionary<string, KeyValuePair<string, Dictionary<string, ProjTex>>>();
+        // every texture by its name (lower case); the biggest copy wins, a .ytd's before a model's own. Read again when the project's files change.
+        public static Dictionary<string, ProjTex> ProjectTextures(string project, List<string> log)
+        {
+            string dir = FilesDir(project); StringBuilder stamp = new StringBuilder();
+            string[] ytds = Directory.Exists(dir) ? Directory.GetFiles(dir, "*.ytd") : new string[0], ydrs = Directory.Exists(dir) ? Directory.GetFiles(dir, "*.ydr") : new string[0];
+            Array.Sort(ytds, StringComparer.OrdinalIgnoreCase); Array.Sort(ydrs, StringComparer.OrdinalIgnoreCase);
+            foreach (string f in ytds) { FileInfo fi = new FileInfo(f); stamp.Append(fi.Name).Append('|').Append(fi.Length).Append('|').Append(fi.LastWriteTimeUtc.Ticks).Append(';'); }
+            foreach (string f in ydrs) { FileInfo fi = new FileInfo(f); stamp.Append(fi.Name).Append('|').Append(fi.Length).Append('|').Append(fi.LastWriteTimeUtc.Ticks).Append(';'); }
+            string key = project.ToLowerInvariant();
+            lock (gate) { KeyValuePair<string, Dictionary<string, ProjTex>> c; if (texCache.TryGetValue(key, out c) && c.Key == stamp.ToString()) return c.Value; }
+            Dictionary<string, ProjTex> all = new Dictionary<string, ProjTex>();
+            foreach (string f in ytds)
             {
                 try
                 {
@@ -245,30 +282,130 @@ namespace MloCreator
                     if (ytd.TextureDict == null || ytd.TextureDict.Textures == null) continue;
                     foreach (Texture t in ytd.TextureDict.Textures.data_items)
                     {
-                        string k = (t.Name ?? "").ToLowerInvariant(); if (!wanted.Contains(k)) continue;
-                        Dictionary<string, object> tj = TexJson(t.Name, t); if (tj == null) continue;
-                        Dictionary<string, object> old; if (found.TryGetValue(k, out old) && J.I(old["fullW"], 0) >= J.I(tj["fullW"], 0)) continue; found[k] = tj;
+                        string k = (t.Name ?? "").ToLowerInvariant(); if (k.Length == 0) continue;
+                        ProjTex old; if (all.TryGetValue(k, out old) && old.T.Width >= t.Width) continue;
+                        ProjTex pt = new ProjTex(); pt.T = t; pt.FromYtd = true; pt.File = Path.GetFileName(f); all[k] = pt;
                     }
                 }
-                catch (Exception ex) { log.Add(Path.GetFileName(f) + ": " + ex.Message); }
+                catch (Exception ex) { if (log != null) log.Add(Path.GetFileName(f) + ": " + ex.Message); }
             }
-            foreach (string f in Directory.Exists(dir) ? Directory.GetFiles(dir, "*.ydr") : new string[0])
+            foreach (string f in ydrs)
             {
                 try
                 {
                     ModelDoc md = Doc(project, Path.GetFileName(f));
                     foreach (string dds in Directory.GetFiles(md.TexDir, "*.dds"))
                     {
-                        string k = Path.GetFileNameWithoutExtension(dds).ToLowerInvariant(); if (!wanted.Contains(k) || found.ContainsKey(k)) continue;
-                        Texture t = CodeWalker.Utils.DDSIO.GetTexture(File.ReadAllBytes(dds)); if (t == null) continue;
-                        Dictionary<string, object> tj = TexJson(k, t); if (tj != null) found[k] = tj;
+                        string k = Path.GetFileNameWithoutExtension(dds).ToLowerInvariant(); if (all.ContainsKey(k)) continue;
+                        Texture t = CodeWalker.Utils.DDSIO.GetTexture(File.ReadAllBytes(dds)); if (t == null) continue; t.Name = k;
+                        ProjTex pt = new ProjTex(); pt.T = t; pt.FromYtd = false; pt.File = Path.GetFileName(f); all[k] = pt;
                     }
                 }
                 catch (Exception) { }
             }
-            foreach (KeyValuePair<string, Dictionary<string, object>> kv in found) texList.Add(kv.Value);
-            res["models"] = models; res["textures"] = texList; res["files"] = List(project); res["entities"] = Entities(project, target, log);
-            return res;
+            lock (gate) { texCache.Clear(); texCache[key] = new KeyValuePair<string, Dictionary<string, ProjTex>>(stamp.ToString(), all); }          // (one project's pictures are kept, they can be big)
+            return all;
+        }
+        // one texture of the project for the export, no bigger than maxSide (null when the project does not have it)
+        public static Texture ProjectTexture(string project, string name, int maxSide)
+        {
+            ProjTex t; if (!ProjectTextures(project, null).TryGetValue((name ?? "").ToLowerInvariant(), out t)) return null;
+            return Shrink(t.T, maxSide);
+        }
+
+        // bytes per 4 x 4 block (block formats) or per pixel; 0 when the format is not known
+        static int FormatBytes(TextureFormat f, out bool block)
+        {
+            block = true;
+            switch (f)
+            {
+                case TextureFormat.D3DFMT_DXT1: case TextureFormat.D3DFMT_ATI1: return 8;
+                case TextureFormat.D3DFMT_DXT3: case TextureFormat.D3DFMT_DXT5: case TextureFormat.D3DFMT_ATI2: case TextureFormat.D3DFMT_BC7: return 16;
+            }
+            block = false;
+            switch (f)
+            {
+                case TextureFormat.D3DFMT_A8R8G8B8: case TextureFormat.D3DFMT_X8R8G8B8: case TextureFormat.D3DFMT_A8B8G8R8: return 4;
+                case TextureFormat.D3DFMT_A1R5G5B5: return 2;
+                case TextureFormat.D3DFMT_A8: case TextureFormat.D3DFMT_L8: return 1;
+            }
+            return 0;
+        }
+        static long LevelBytes(int w, int h, bool block, int bpb) { w = Math.Max(1, w); h = Math.Max(1, h); return block ? (long)Math.Max(1, (w + 3) / 4) * Math.Max(1, (h + 3) / 4) * bpb : (long)w * h * bpb; }
+        // A copy of a texture no wider or taller than maxSide: its biggest mip levels are left out, so the picture is the game's own (nothing is compressed again).
+        // The texture itself when it is small enough, or its format is not known.
+        public static Texture Shrink(Texture t, int maxSide)
+        {
+            if (t == null || maxSide <= 0) return t;
+            int levels = Math.Max(1, (int)t.Levels), drop = 0;
+            while (drop < levels - 1 && Math.Max(t.Width >> drop, t.Height >> drop) > maxSide) drop++;
+            if (drop == 0) return t;
+            bool block; int bpb = FormatBytes(t.Format, out block); if (bpb == 0 || t.Data == null || t.Data.FullData == null) return t;
+            long off = 0; for (int i = 0; i < drop; i++) off += LevelBytes(t.Width >> i, t.Height >> i, block, bpb);
+            long len = 0; for (int i = drop; i < levels; i++) len += LevelBytes(t.Width >> i, t.Height >> i, block, bpb);
+            byte[] full = t.Data.FullData; if (off + len > full.Length) return t;
+            byte[] part = new byte[len]; Buffer.BlockCopy(full, (int)off, part, 0, (int)len);
+            Texture n = new Texture(); n.Name = t.Name; n.NameHash = t.NameHash; n.Usage = t.Usage; n.UsageFlags = t.UsageFlags; n.Format = t.Format; n.Depth = Math.Max((ushort)1, t.Depth);
+            n.Width = (ushort)Math.Max(1, t.Width >> drop); n.Height = (ushort)Math.Max(1, t.Height >> drop); n.Levels = (byte)(levels - drop);
+            n.Stride = (ushort)(block ? Math.Max(1, (n.Width + 3) / 4) * bpb : n.Width * bpb);
+            n.Data = new TextureData(); n.Data.FullData = part;
+            return n;
+        }
+
+        // a normal or specular map by its name or its use (it is not offered as a picture to paint with)
+        static readonly System.Text.RegularExpressions.Regex MapName = new System.Text.RegularExpressions.Regex("(_n|_nm|_nrm|_normal|_bump|_s|_sp|_spec|_specular|_hm|_height|_mask|_ao)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        static bool IsMapName(string name, Texture t)
+        {
+            if (MapName.IsMatch(name)) return true;
+            try { string u = t.Usage.ToString(); if (u.IndexOf("NORMAL", StringComparison.OrdinalIgnoreCase) >= 0 || u.IndexOf("SPECULAR", StringComparison.OrdinalIgnoreCase) >= 0) return true; } catch (Exception) { }
+            return false;
+        }
+
+        // How the models use a texture: triangles, the area of the faces and of their texture coordinates (so the size of one repeat in metres),
+        // how much of it faces sideways (walls), up (floors, roofs) or down (ceilings), the normal and specular maps and settings of its shader.
+        public class TexUse { public string Name, Bump = "", Spec = "", Shader = ""; public int Tris; public double Aw, Auv, Side, Up, Down, BumpAmt = double.NaN, SpecAmt = double.NaN, Fall = double.NaN; public List<string> Files = new List<string>(); }
+        static Dictionary<string, TexUse> TexUses(string project, string dir)
+        {
+            Dictionary<string, TexUse> r = new Dictionary<string, TexUse>(); if (dir == null || !Directory.Exists(dir)) return r;
+            foreach (string f in Directory.GetFiles(dir, "*.ydr"))
+            {
+                ModelDoc md; try { md = Doc(project, Path.GetFileName(f)); } catch (Exception) { continue; }
+                foreach (GeomData g in md.Geoms)
+                {
+                    if (g.Lod != 0 || g.Tex.Length == 0) continue; string k = g.Tex.ToLowerInvariant(); TexUse u;
+                    if (!r.TryGetValue(k, out u)) { u = new TexUse(); u.Name = k; r[k] = u; }
+                    if (u.Bump.Length == 0 && g.Bump.Length > 0) u.Bump = g.Bump.ToLowerInvariant(); if (u.Spec.Length == 0 && g.Spec.Length > 0) u.Spec = g.Spec.ToLowerInvariant();
+                    if (u.Shader.Length == 0) u.Shader = g.ShaderName; if (double.IsNaN(u.BumpAmt)) u.BumpAmt = g.BumpAmt; if (double.IsNaN(u.SpecAmt)) u.SpecAmt = g.SpecAmt; if (double.IsNaN(u.Fall)) u.Fall = g.SpecFall;
+                    string fn = Path.GetFileName(f); if (!u.Files.Contains(fn)) u.Files.Add(fn);
+                    int S = g.Stride, P = g.PosOff, U = g.UvOff, nv = g.VertCount; u.Tris += g.Idx.Length / 3;
+                    for (int t = 0; t + 2 < g.Idx.Length; t += 3)
+                    {
+                        int a = g.Idx[t], b = g.Idx[t + 1], c = g.Idx[t + 2]; if (a >= nv || b >= nv || c >= nv) continue;
+                        double ax = g.V[a * S + P], ay = g.V[a * S + P + 1], az = g.V[a * S + P + 2], ux = g.V[b * S + P] - ax, uy = g.V[b * S + P + 1] - ay, uz = g.V[b * S + P + 2] - az, vx = g.V[c * S + P] - ax, vy = g.V[c * S + P + 1] - ay, vz = g.V[c * S + P + 2] - az;
+                        double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, area = Math.Sqrt(nx * nx + ny * ny + nz * nz) / 2; if (area < 1e-9) continue;
+                        double zc = nz / (2 * area); if (zc > 0.7) u.Up += area; else if (zc < -0.7) u.Down += area; else u.Side += area;
+                        if (U < 0) continue;
+                        double s0 = g.V[a * S + U], t0 = g.V[a * S + U + 1], du1 = g.V[b * S + U] - s0, dv1 = g.V[b * S + U + 1] - t0, du2 = g.V[c * S + U] - s0, dv2 = g.V[c * S + U + 1] - t0;
+                        double auv = Math.Abs(du1 * dv2 - du2 * dv1) / 2; if (auv < 1e-12 || double.IsNaN(auv)) continue;
+                        u.Aw += area; u.Auv += auv;
+                    }
+                }
+            }
+            return r;
+        }
+        static Dictionary<string, object> TexInfoJson(TexUse u, Dictionary<string, ProjTex> all)
+        {
+            Dictionary<string, object> d = new Dictionary<string, object>(); ProjTex pt; all.TryGetValue(u.Name, out pt);
+            int w = pt != null ? pt.T.Width : 256, h = pt != null ? pt.T.Height : 256;
+            d["name"] = u.Name; d["w"] = w; d["h"] = h; d["tris"] = u.Tris; d["shader"] = u.Shader; d["files"] = u.Files; d["src"] = pt != null ? pt.File : "";
+            // one repeat of the picture across, in metres: with square texels, (face area / texture area) = (w * texel) * (h * texel), so across = sqrt(ratio * w / h)
+            double tile = u.Auv > 1e-9 ? Math.Sqrt(u.Aw / u.Auv * w / (double)h) : 0; d["tile"] = tile > 0 ? Math.Round(Math.Max(0.05, Math.Min(50, tile)), 3) : 0;
+            double tot = u.Side + u.Up + u.Down; d["faces"] = tot > 0 ? new double[] { Math.Round(u.Side / tot, 3), Math.Round(u.Up / tot, 3), Math.Round(u.Down / tot, 3) } : new double[] { 0, 0, 0 };
+            ProjTex nt, st; bool hasN = u.Bump.Length > 0 && all.TryGetValue(u.Bump, out nt), hasS = u.Spec.Length > 0 && all.TryGetValue(u.Spec, out st);
+            if (hasN) { d["normal"] = u.Bump; Dictionary<string, object> pv = TexJson(u.Bump, all[u.Bump].T, 48); if (pv != null) d["nprev"] = pv; }
+            if (hasS) { d["spec"] = u.Spec; Dictionary<string, object> pv = TexJson(u.Spec, all[u.Spec].T, 48); if (pv != null) d["sprev"] = pv; }
+            if (!double.IsNaN(u.BumpAmt)) d["bump"] = Math.Round(u.BumpAmt, 4); if (!double.IsNaN(u.SpecAmt)) d["specAmt"] = Math.Round(u.SpecAmt, 4); if (!double.IsNaN(u.Fall)) d["fall"] = Math.Round(u.Fall, 3);
+            return d;
         }
 
         // ---------- where the model stands in the world: the entity in an imported .ymap ----------
@@ -468,7 +605,7 @@ namespace MloCreator
             }
         }
 
-        static double[] EntityOf(Dictionary<string, object> ent)
+        internal static double[] EntityOf(Dictionary<string, object> ent)
         {
             return new double[] { J.D(J.G(ent, "x"), 0), J.D(J.G(ent, "y"), 0), J.D(J.G(ent, "z"), 0), J.D(J.G(ent, "heading"), 0) * Math.PI / 180 };
         }
@@ -636,7 +773,7 @@ namespace MloCreator
 
         // ---------- occluders ----------
         // world extents of the building (x0, y0, x1, y1), or null when its placement is not known
-        static double[] ModelWorldBox(string project, string target, Dictionary<string, object> entity)
+        internal static double[] ModelWorldBox(string project, string target, Dictionary<string, object> entity)
         {
             if (entity == null) return null;
             ModelDoc md = Doc(project, target); double[] e = EntityOf(entity), r = new double[] { 1e30, 1e30, -1e30, -1e30 }; double c = Math.Cos(e[3]), s = Math.Sin(e[3]);
@@ -704,16 +841,51 @@ namespace MloCreator
         }
 
         // pictures of plant props: { name: { pos, nrm (loose triangles, 3 numbers a vertex), tris (all its triangles), shown (the ones sent) } }
-        public static Dictionary<string, object> PropModels(List<string> names, string gta)
+        public static Dictionary<string, object> PropModels(List<string> names, string gta) { return PropModels(null, names, gta); }
+        // project: a model file of the project by that name comes first (a prop of your own); the game's files are only read when a name is not one of them
+        public static Dictionary<string, object> PropModels(string project, List<string> names, string gta)
         {
-            Vanilla.Init(gta, cacheDir); Dictionary<string, object> res = new Dictionary<string, object>();
+            Dictionary<string, object> res = new Dictionary<string, object>(); List<string> rest = new List<string>();
             foreach (string n in names)
             {
                 string nm = CleanName(n); if (nm.Length == 0 || res.ContainsKey(nm)) continue;
+                string pf = project == null ? null : Path.Combine(FilesDir(project), nm + ".ydr");
+                if (pf == null || !File.Exists(pf)) { rest.Add(nm); continue; }
+                try { float[][] om = OwnMesh(project, nm + ".ydr", 2500); if (om != null && om[0].Length > 0) { Dictionary<string, object> od = new Dictionary<string, object>(); od["pos"] = B64(om[0]); od["nrm"] = B64(om[1]); od["tris"] = (int)om[2][0]; od["shown"] = om[0].Length / 9; od["own"] = true; res[nm] = od; } } catch (Exception) { }
+            }
+            if (rest.Count == 0) return res;
+            if (project != null) { try { Vanilla.Init(gta, cacheDir); } catch (Exception) { return res; } }          // (no game: the project's own models still come; the others get no picture)
+            else Vanilla.Init(gta, cacheDir);
+            foreach (string nm in rest)
+            {
+                if (res.ContainsKey(nm)) continue;
                 float[][] m = Vanilla.PropMesh(nm, 2500); if (m == null || m[0].Length == 0) continue;
                 Dictionary<string, object> d = new Dictionary<string, object>(); d["pos"] = B64(m[0]); d["nrm"] = B64(m[1]); d["tris"] = (int)m[2][0]; d["shown"] = m[0].Length / 9; res[nm] = d;
             }
             return res;
+        }
+
+        // a model file of the project as loose triangles (most detailed level, at most maxTris), like Vanilla.PropMesh
+        static float[][] OwnMesh(string project, string file, int maxTris)
+        {
+            ModelDoc md = Doc(project, file); List<float[]> tris = new List<float[]>();
+            foreach (GeomData g in md.Geoms)
+            {
+                if (g.Lod != 0) continue; int S = g.Stride, P = g.PosOff, nv = g.VertCount;
+                for (int t = 0; t + 2 < g.Idx.Length; t += 3)
+                {
+                    int a = g.Idx[t], b = g.Idx[t + 1], c = g.Idx[t + 2]; if (a >= nv || b >= nv || c >= nv) continue;
+                    tris.Add(new float[] { g.V[a * S + P], g.V[a * S + P + 1], g.V[a * S + P + 2], g.V[b * S + P], g.V[b * S + P + 1], g.V[b * S + P + 2], g.V[c * S + P], g.V[c * S + P + 1], g.V[c * S + P + 2] });
+                }
+            }
+            List<float> pos = new List<float>(), nrm = new List<float>(); int step = Math.Max(1, (int)Math.Ceiling(tris.Count / (double)Math.Max(1, maxTris)));
+            for (int i = 0; i < tris.Count; i += step)
+            {
+                float[] tr = tris[i]; float ux = tr[3] - tr[0], uy = tr[4] - tr[1], uz = tr[5] - tr[2], vx = tr[6] - tr[0], vy = tr[7] - tr[1], vz = tr[8] - tr[2];
+                float nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = (float)Math.Sqrt(nx * nx + ny * ny + nz * nz); if (l < 1e-9f) { nx = 0; ny = 0; nz = 1; l = 1; }
+                for (int j = 0; j < 3; j++) { pos.Add(tr[j * 3]); pos.Add(tr[j * 3 + 1]); pos.Add(tr[j * 3 + 2]); nrm.Add(nx / l); nrm.Add(ny / l); nrm.Add(nz / l); }
+            }
+            return new float[][] { pos.ToArray(), nrm.ToArray(), new float[] { tris.Count } };
         }
 
         // removes the box occluders whose centre is inside the interior (spec.rects in the interior's own coordinates, spec.place = where that frame stands in the world)

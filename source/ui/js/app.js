@@ -47,7 +47,7 @@ window.MLO = window.MLO || {};
             if (IM.loaded && IM._syncKey !== fk) { IM._syncKey = fk; IM.syncFaceCutters(); }
             const ck = JSON.stringify([I.frame, I.target, I.cutters, I.deletes, I.fills, IM.clearKey()]);      // (the rooms clear parts of the model too, so they are part of the cut)
             App.built = M.Shell.build(S.project, { boxes: true });          // (with the collision boxes, for the "my collision" outline)
-            App.renderer.setBatches(App.built.batches.concat(IM.doorBatches(), M.FitModels.batches()));
+            App.renderer.setBatches(App.built.batches.concat(IM.doorBatches(), M.FitModels.batches(), M.Props ? M.Props.batches() : []));
             // the imported model only changes with the grid (frame) or with cutters / deleted faces
             const md = I.mdeletes || [], bk = JSON.stringify([I.building, I.iso, md.length, md[md.length - 1]]), again = fk !== App._fk || bk !== App._bk;
             if (bk !== App._bk && IM.loaded) IM.rebuildMembers();
@@ -85,7 +85,7 @@ window.MLO = window.MLO || {};
     App.setTool = function (tool) {
         M.Errors.crumb('tool ' + tool);
         if (isShell()) {
-            const ok = isImport() ? ['building', 'frame', 'level', 'room', 'cut', 'fill', 'part', 'door', 'window', 'arch', 'floor', 'light', 'column', 'beam', 'figure', 'faces', 'edges', 'parts', 'collision', 'cbox', 'walk', 'fit', 'plants', 'select', 'eraser', 'paint'] : ['room', 'cut', 'part', 'door', 'window', 'arch', 'floor', 'select', 'eraser', 'paint'];
+            const ok = isImport() ? ['building', 'frame', 'level', 'room', 'cut', 'fill', 'part', 'door', 'window', 'arch', 'floor', 'light', 'column', 'beam', 'furnish', 'figure', 'faces', 'edges', 'parts', 'collision', 'cbox', 'walk', 'fit', 'plants', 'select', 'eraser', 'paint'] : ['room', 'cut', 'part', 'door', 'window', 'arch', 'floor', 'select', 'eraser', 'paint'];
             if (ok.indexOf(tool) < 0) return;
             if (tool === 'paint') { S.shellTool = 'paint'; App.setTab('paint'); return; }
             if (tool === 'collision' && isImport() && !S.showCollision) { S.showCollision = true; M.ImportModel.requestCollision(); M.UI.renderRight(); }       // the pieces to pick are the orange lines

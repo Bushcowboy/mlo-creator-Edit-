@@ -177,3 +177,17 @@ body.paint #keys { display: none; }
 
 .dropzone { border: 1px dashed var(--line2); border-radius: var(--r); padding: 8px; margin: 6px 0; color: var(--muted); font-size: 12px; text-align: center; }
 input[type=range] { accent-color: var(--accent); min-width: 0; }
+
+/* Place props tool: groups of suggested models */
+details.pgrp { border: 1px solid var(--line); border-radius: var(--r); margin: 6px 0; background: var(--panel2); }
+details.pgrp > summary { cursor: pointer; padding: 6px 8px; font-weight: 600; font-size: 12px; list-style: none; display: flex; gap: 6px; align-items: center; }
+details.pgrp > summary::-webkit-details-marker { display: none; }
+details.pgrp > summary::before { content: '\25B8'; color: var(--muted); }
+details.pgrp[open] > summary::before { content: '\25BE'; }
+details.pgrp .pbody { padding: 0 8px 8px; }
+.plist { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin: 4px 0; }
+.prow { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; border: 1px solid transparent; }
+.prow:hover { border-color: var(--line2); }
+.prow.on { border-color: var(--accent); background: rgba(79, 140, 255, .12); }
+.prow .pn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prow small { color: var(--muted); }

@@ -47,7 +47,7 @@ The Build tab shows a route of nine stages that open like dropdowns; a card abov
 4. **Doors and windows.** Door, Window and Archway tools cut through the model; the Models tool places door and window models from your own `.glb` files.
 5. **Clean up the model.** Delete faces, model parts, edges (fill holes), collision pieces, and your own collision boxes. The model's parts that stick into the rooms are cleared automatically.
 6. **Props and small removals.** Bushes, trees and other props the map places around the building, and small pieces of the model.
-7. **Finish the inside.** Floor and wall paint, ceiling lights.
+7. **Finish the inside.** Floor and wall paint (also with the model's own textures), ceiling lights, ceilings, columns and beams, props.
 8. **Check it.** The checklist and the walk check.
 9. **Export.**
 
@@ -55,6 +55,22 @@ The Build tab shows a route of nine stages that open like dropdowns; a card abov
 
 - **A room's ceiling** (select the room): flat, vaulted (gable), barrel, tray or shed, with its rise, the direction of the ridge and a texture; and beams across, along or both ways (under a vault they follow it as ribs, rafters and purlins). The gable ends close the space above the walls, and the sloped ceiling gets collision. The building's roof has to be higher than the vault.
 - **Column** (8): click the floor; square or round, with a base and capital, up to the ceiling above it (also under a vault). **Beam** (9): click its start and its end; straight or 45° (Shift: any angle), its top at the ceiling or at a height you give; low beams get collision. Both are listed in their tool panels with their settings; Alt+click (beams) or a second click (columns) or the Eraser removes them.
+
+### Placing props
+
+The **Place props** tool (key 0, *Finish the inside*) puts the game's props, or model files of yours, inside the interior. Pick a model in the panel, then click the floor; click another prop to stand the model on top of it (a vase on a table). With no model chosen (Esc), or with Alt, a click selects a prop and a drag moves it; R turns it 90° (Shift+R: 15°), Shift+D copies it, X removes it, and the panel has its position, height and facing. The models come from what the project is made of:
+
+- **From your files**: the props your imported map files (`.ymap`) place, the most used first (not the building's own models, not LOD copies), and model files of the project that nothing places.
+- **Around the building in the game**: the props the game's map places within 25 m of the building, by how often each stands there (needs the building's placement and the game).
+- **Same game archive**: the other models of the `.rpf` that holds the building's model.
+- **From a game interior**: the game's interiors within 600 m of the building, or one found by name; its props with how many it uses and the entity set they belong to (its big wall and floor pieces are left out).
+- **Search every game model**: every `.ydr` and `.yft` name of the game.
+
+The view draws each prop's own mesh (a box while it has no picture). On export every prop is an entity of the interior room. For a game model, the type file that defines it (from the list of the game's models that is made with the game's interior list) is added to the interior's manifest, so the game loads it with the interior. A model file of yours is copied into the resource with the texture file it uses and defined in the interior's type file. The README lists them.
+
+### The model's own textures
+
+The textures of your imported files can be painted on your walls, floors and ceilings: the Paint tab's *From the model* and the bench's *From the model* category (the most used first). Each one comes at the size it has on the model (the host measures it from the model's texture coordinates; a picture that is not square keeps its proportions), which you can change (*repeats every*, kept in the project). Its own normal and specular maps and its shader's bumpiness and shine come with it; without them a normal map is made from the picture. The bench also shows the program's textures closest in colour. On export the picture itself (and its maps) is copied from your files into `<prefix>_tex.ytd`, at most 1024 px (the bigger mip levels are left out, nothing is compressed again); the 256 px preview stands in when the file is gone.
 
 ### Materials in the game
 
@@ -97,6 +113,7 @@ The *Timecycle* section of the Paint tab sets how the game lights and grades the
 | Props and plants | Pick and remove map props, plants and small pieces |
 | Floor paint, Light | Finish the inside |
 | Column, Beam | Columns from floor to ceiling, beams under it |
+| Place props | The game's props or your own models inside, suggested from your files, the building's surroundings and the game's interiors |
 | Walk check | Walk a player-sized capsule through the result |
 | Scale figure | A 1.8 m figure to judge heights against |
 | Cutaway | Hide the model above a height to see inside |
@@ -171,9 +188,10 @@ Press Export on the Export tab; the folder goes to `output\<folder>` (or the fol
 | `<prefix>_glass.ydr` | Window glass |
 | `<prefix>_pnt0.ydr`, `_pnt1.ydr`... | The surfaces the colour schemes swap, once per scheme (entity sets `<prefix>_paint_...`) |
 | `<prefix>_mlo.ybn` | Collision for floors, walls and your boxes |
-| `<prefix>_tex.ytd` | Only the textures you used |
-| `<prefix>_types.ytyp` | The MLO: limbo room + interior room, one portal for each door or window that reaches the outside, and the door props |
-| `<prefix>_milo_.ymap`, `_manifest_<prefix>.ymf` | Where it stands, and the interior marker |
+| `<prefix>_tex.ytd` | Only the textures you used (the model's own pictures copied from your files, up to 1024 px) |
+| `<prefix>_types.ytyp` | The MLO: limbo room + interior room, one portal for each door or window that reaches the outside, the door props and the props you placed |
+| `<prefix>_milo_.ymap`, `_manifest_<prefix>.ymf` | Where it stands, and the interior marker (with the game's type files the placed props need) |
+| `<name>.ydr` and its `.ytd` | Model files of yours placed as props |
 | the model's `.ydr` | The building model with your cuts, written under its original name so it replaces the game's one while the resource runs |
 | the imported `.ybn` files | The collision with the same cuts |
 | the occlusion `.ymap` files | The same files without the boxes inside your interior (only when some were inside) |
@@ -194,6 +212,7 @@ Press Export on the Export tab; the folder goes to `output\<folder>` (or the fol
 - Door props are static: wire them to your door script by model and coordinates.
 - Textures that are not in the files you import are shown in plain colours in the editor; the game uses its own.
 - The model's tilt is ignored (only the turn about the vertical is used); the model's scale must be 1.
+- Placed props turn about the vertical only and keep their own collision. Which of the game's type files defines a prop comes from the list of the game's models made with the game's interior list: without it, props whose type file is not always loaded may not show (the export says so).
 
 ## Whole new building
 
@@ -274,7 +293,7 @@ No model, texture or other game file is copied: the entities keep the game's mod
 
 **General:** Ctrl+Z / Ctrl+Y undo and redo, Esc or right-click cancels a drag, Ctrl+S saves. The hint bar above the status line shows the active tool's keys.
 
-**Tool keys:** Add room 1, Cut out 2, Partition 3, Door 4, Window 5, Archway 6, Floor paint 7, Light L, Select V, Eraser X, Select building B, Frame O, Raise / lower G, Fill gaps J, Delete faces F, Model parts P, Edges K, Collision M, Collision box N, Window / door models I, Props and plants Y, Column 8, Beam 9, Walk check U, Scale figure H, Cutaway C.
+**Tool keys:** Add room 1, Cut out 2, Partition 3, Door 4, Window 5, Archway 6, Floor paint 7, Light L, Select V, Eraser X, Select building B, Frame O, Raise / lower G, Fill gaps J, Delete faces F, Model parts P, Edges K, Collision M, Collision box N, Window / door models I, Props and plants Y, Column 8, Beam 9, Place props 0, Walk check U, Scale figure H, Cutaway C.
 
 ## Code map
 
@@ -298,5 +317,6 @@ No model, texture or other game file is copied: the entities keep the game's mod
 | `ui\interiors.html`, `ui\js\interiors.js` | The game's own interiors: list, plan, export |
 | `ui\js\look.js` | Paint tab: materials, wall colours, trim, lights, timecycle |
 | `ui\js\structure.js` | Room ceilings (vaulted, barrel, tray, shed), the Column and Beam tools |
+| `ui\js\props.js`, `src\Assets.cs` | The Place props tool, and the models it suggests |
 | `ui\world.html`, `ui\js\world.js`, `ui\js\world3d.js` | Server and world: your resources on the map, the area in 3D |
 | `src\Area.cs` | An area in 3D: the game's buildings, your MLOs, and the collision of both |

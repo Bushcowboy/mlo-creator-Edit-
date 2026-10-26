@@ -31,7 +31,7 @@ namespace MloCreator
     }
     class PortalData { public int Flags; public double[] C; }
     class DoorData { public string Name; public double X, Y, Z, Heading, ScaleXY = 1, ScaleZ = 1; }      // scale: the door model fitted to its opening
-    class TexData { public string Name; public int Size; public bool Alpha; public int[] Argb; public string Usage = "DIFFUSE"; }
+    class TexData { public string Name; public int Size; public bool Alpha, Fallback; public int[] Argb; public string Usage = "DIFFUSE"; public Texture Raw; }      // Raw: a texture of the imported model, copied as it is; Fallback: used only when no other texture of that name came
 
     public static class J
     {
@@ -324,7 +324,8 @@ namespace MloCreator
             return pad + "<Item type=\"CEntityDef\">\n" + pad + " <archetypeName>" + arch + "</archetypeName>\n" + pad + " <flags value=\"1572864\" />\n" + pad + " <guid value=\"0\" />\n" + pad + " <position x=\"" + F(x) + "\" y=\"" + F(y) + "\" z=\"" + F(z) + "\" />\n" + pad + " <rotation x=\"0\" y=\"0\" z=\"" + F(Math.Sin(r)) + "\" w=\"" + F(Math.Cos(r)) + "\" />\n" + pad + " <scaleXY value=\"" + F(scaleXY) + "\" />\n" + pad + " <scaleZ value=\"" + F(scaleZ) + "\" />\n" + pad + " <parentIndex value=\"-1\" />\n" + pad + " <lodDist value=\"-1\" />\n" + pad + " <childLodDist value=\"0\" />\n" + pad + " <lodLevel>LODTYPES_DEPTH_ORPHANHD</lodLevel>\n" + pad + " <numChildren value=\"0\" />\n" + pad + " <priorityLevel>PRI_REQUIRED</priorityLevel>\n" + pad + " <extensions />\n" + pad + " <ambientOcclusionMultiplier value=\"255\" />\n" + pad + " <artificialAmbientOcclusion value=\"255\" />\n" + pad + " <tintValue value=\"0\" />\n" + pad + "</Item>\n";
         }
 
-        static string YtypXml(string P, string mlo, string txd, List<GroupData> groups, List<PortalData> portals, V3 bmn, V3 bmx, string timecycle, List<DoorData> doors, string doorArch)
+        static string YtypXml(string P, string mlo, string txd, List<GroupData> groups, List<PortalData> portals, V3 bmn, V3 bmx, string timecycle, List<DoorData> doors, string doorArch) { return YtypXml(P, mlo, txd, groups, portals, bmn, bmx, timecycle, doors, doorArch, new List<DoorData>()); }
+        static string YtypXml(string P, string mlo, string txd, List<GroupData> groups, List<PortalData> portals, V3 bmn, V3 bmx, string timecycle, List<DoorData> doors, string doorArch, List<DoorData> props)
         {
             StringBuilder s = new StringBuilder();
             s.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CMapTypes>\n <extensions />\n <archetypes>");
@@ -342,6 +343,7 @@ namespace MloCreator
             List<GroupData> main = groups.FindAll(delegate (GroupData q) { return q.Set == null; });
             foreach (GroupData g in main) s.Append(EntityXml(P + g.Name, g.Flags, g.Lod));
             foreach (DoorData d in doors) s.Append(PropEntityXml(d.Name, d.X, d.Y, d.Z, d.Heading, d.ScaleXY, d.ScaleZ));
+            foreach (DoorData d in props) s.Append(PropEntityXml(d.Name, d.X, d.Y, d.Z, d.Heading, d.ScaleXY, d.ScaleZ));
             s.AppendLine("   </entities>");
             s.AppendLine("   <rooms itemType=\"CMloRoomDef\">");
             string rb = "<bbMin x=\"" + F(bmn.X) + "\" y=\"" + F(bmn.Y) + "\" z=\"" + F(bmn.Z) + "\" />\n     <bbMax x=\"" + F(bmx.X) + "\" y=\"" + F(bmx.Y) + "\" z=\"" + F(bmx.Z) + "\" />";
@@ -349,7 +351,7 @@ namespace MloCreator
             {
                 List<string> att = new List<string>();
                 for (int i = 0; i < main.Count; i++) if (main[i].Room == room) att.Add(i.ToString());
-                if (room == 1) for (int i = 0; i < doors.Count; i++) att.Add((main.Count + i).ToString());
+                if (room == 1) for (int i = 0; i < doors.Count + props.Count; i++) att.Add((main.Count + i).ToString());
                 string name = room == 0 ? "limbo" : mlo;
                 s.AppendLine("    <Item>\n     <name>" + name + "</name>\n     " + rb + "\n     <blend value=\"1\" />\n     <timecycleName>" + timecycle + "</timecycleName>\n     <secondaryTimecycleName />\n     <flags value=\"96\" />\n     <portalCount value=\"" + portals.Count + "\" />\n     <floorId value=\"0\" />\n     <exteriorVisibiltyDepth value=\"-1\" />\n     <attachedObjects>" + string.Join(" ", att.ToArray()) + "</attachedObjects>\n    </Item>");
             }
@@ -393,9 +395,12 @@ namespace MloCreator
                 " <containerLods itemType=\"rage__fwContainerLodDef\" />\n <boxOccluders itemType=\"BoxOccluder\" />\n <occludeModels itemType=\"OccludeModel\" />\n <physicsDictionaries />\n <instancedData>\n  <ImapLink />\n  <PropInstanceList itemType=\"rage__fwPropInstanceListDef\" />\n  <GrassInstanceList itemType=\"rage__fwGrassInstanceListDef\" />\n </instancedData>\n <timeCycleModifiers itemType=\"CTimeCycleModifier\" />\n <carGenerators itemType=\"CCarGen\" />\n <LODLightsSOA>\n  <direction itemType=\"FloatXYZ\" />\n  <falloff />\n  <falloffExponent />\n  <timeAndStateFlags />\n  <hash />\n  <coneInnerAngle />\n  <coneOuterAngleOrCapExt />\n  <coronaIntensity />\n </LODLightsSOA>\n <DistantLODLightsSOA>\n  <position itemType=\"FloatXYZ\" />\n  <RGBI />\n  <numStreetLights value=\"0\" />\n  <category value=\"0\" />\n </DistantLODLightsSOA>\n <block>\n  <version value=\"0\" />\n  <flags value=\"0\" />\n  <name>" + mapName + "</name>\n  <exportedBy>MLO Creator</exportedBy>\n  <owner></owner>\n  <time>" + DateTime.Now.ToString("d MMMM yyyy HH:mm", CultureInfo.InvariantCulture) + "</time>\n </block>\n</CMapData>\n";
         }
 
-        static string ManifestXml(string P, string mlo)
+        static string ManifestXml(string P, string mlo) { return ManifestXml(P, mlo, new List<string>()); }
+        // deps: the game's type files that define the props placed inside (the game loads them with the interior)
+        static string ManifestXml(string P, string mlo, List<string> deps)
         {
-            return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CPackFileMetaData>\n <MapDataGroups itemType=\"CMapDataGroup\" />\n <HDTxdBindingArray itemType=\"CHDTxdAssetBinding\" />\n <imapDependencies itemType=\"CImapDependency\" />\n <imapDependencies_2 itemType=\"CImapDependencies\">\n  <Item>\n   <imapName>" + P + "milo_</imapName>\n   <manifestFlags>INTERIOR_DATA</manifestFlags>\n   <itypDepArray>\n    <Item>" + P + "types</Item>\n   </itypDepArray>\n  </Item>\n </imapDependencies_2>\n <itypDependencies_2 itemType=\"CItypDependencies\">\n  <Item>\n   <itypName>" + P + "types</itypName>\n   <manifestFlags>INTERIOR_DATA</manifestFlags>\n   <itypDepArray />\n  </Item>\n </itypDependencies_2>\n <Interiors itemType=\"CInteriorBoundsFiles\">\n  <Item>\n   <Name>" + mlo + "</Name>\n   <Bounds>\n    <Item>" + mlo + "</Item>\n   </Bounds>\n  </Item>\n </Interiors>\n</CPackFileMetaData>\n";
+            StringBuilder d1 = new StringBuilder(), d2 = new StringBuilder(); foreach (string y in deps) { d1.Append("\n    <Item>" + y + "</Item>"); d2.Append("\n    <Item>" + y + "</Item>"); }
+            return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CPackFileMetaData>\n <MapDataGroups itemType=\"CMapDataGroup\" />\n <HDTxdBindingArray itemType=\"CHDTxdAssetBinding\" />\n <imapDependencies itemType=\"CImapDependency\" />\n <imapDependencies_2 itemType=\"CImapDependencies\">\n  <Item>\n   <imapName>" + P + "milo_</imapName>\n   <manifestFlags>INTERIOR_DATA</manifestFlags>\n   <itypDepArray>\n    <Item>" + P + "types</Item>" + d1 + "\n   </itypDepArray>\n  </Item>\n </imapDependencies_2>\n <itypDependencies_2 itemType=\"CItypDependencies\">\n  <Item>\n   <itypName>" + P + "types</itypName>\n   <manifestFlags>INTERIOR_DATA</manifestFlags>\n   " + (deps.Count == 0 ? "<itypDepArray />" : "<itypDepArray>" + d2 + "\n   </itypDepArray>") + "\n  </Item>\n </itypDependencies_2>\n <Interiors itemType=\"CInteriorBoundsFiles\">\n  <Item>\n   <Name>" + mlo + "</Name>\n   <Bounds>\n    <Item>" + mlo + "</Item>\n   </Bounds>\n  </Item>\n </Interiors>\n</CPackFileMetaData>\n";
         }
 
         static string TxdXml(List<TexData> texs, string px)
@@ -404,7 +409,8 @@ namespace MloCreator
             foreach (TexData t in texs)
             {
                 string n = px + t.Name;
-                x.Append(" <Item>\n  <Name>" + n + "</Name>\n  <Unk32 value=\"128\" />\n  <Usage>" + t.Usage + "</Usage>\n  <UsageFlags>UNK24</UsageFlags>\n  <ExtraFlags value=\"0\" />\n  <Width value=\"" + t.Size + "\" />\n  <Height value=\"" + t.Size + "\" />\n  <MipLevels value=\"" + Dds.MipCount(t.Size) + "\" />\n  <Format>" + (t.Alpha ? "D3DFMT_DXT5" : "D3DFMT_DXT1") + "</Format>\n  <FileName>" + n + ".dds</FileName>\n </Item>\n");
+                string w = t.Raw != null ? t.Raw.Width.ToString() : t.Size.ToString(), h = t.Raw != null ? t.Raw.Height.ToString() : t.Size.ToString(), mips = t.Raw != null ? Math.Max(1, (int)t.Raw.Levels).ToString() : Dds.MipCount(t.Size).ToString(), fmt = t.Raw != null ? t.Raw.Format.ToString() : (t.Alpha ? "D3DFMT_DXT5" : "D3DFMT_DXT1");
+                x.Append(" <Item>\n  <Name>" + n + "</Name>\n  <Unk32 value=\"128\" />\n  <Usage>" + t.Usage + "</Usage>\n  <UsageFlags>UNK24</UsageFlags>\n  <ExtraFlags value=\"0\" />\n  <Width value=\"" + w + "\" />\n  <Height value=\"" + h + "\" />\n  <MipLevels value=\"" + mips + "\" />\n  <Format>" + fmt + "</Format>\n  <FileName>" + n + ".dds</FileName>\n </Item>\n");
             }
             x.Append("</TextureDictionary>\n");
             return x.ToString();
@@ -422,10 +428,35 @@ namespace MloCreator
             File.WriteAllText(path, text.Replace("\r\n", "\n"), new UTF8Encoding(false));
         }
 
-        class InteriorInfo { public string TcXml, TcName; public List<string> Sets = new List<string>(); public string DefaultSet; public List<string> DoorLines = new List<string>(); public List<string> Credits = new List<string>(); public string P, Label, Mlo, EntranceNote, DoorName; public double X, Y, Z, Heading; public int Doors; }
+        class InteriorInfo { public List<string> PropLines = new List<string>(); public string TcXml, TcName; public List<string> Sets = new List<string>(); public string DefaultSet; public List<string> DoorLines = new List<string>(); public List<string> Credits = new List<string>(); public string P, Label, Mlo, EntranceNote, DoorName; public double X, Y, Z, Heading; public int Doors; }
+
+        // The texture file a model of the project needs: one of its own name, else the project's .ytd that holds the textures its shaders use (null: none, they are inside the model)
+        static string PropYtd(string project, string name, YdrFile y)
+        {
+            string dir = ImportHost.FilesDir(project); if (File.Exists(Path.Combine(dir, name + ".ytd"))) return name + ".ytd";
+            Dictionary<string, ImportHost.ProjTex> all = ImportHost.ProjectTextures(project, null); Dictionary<string, int> votes = new Dictionary<string, int>();
+            try
+            {
+                if (y.Drawable != null && y.Drawable.ShaderGroup != null && y.Drawable.ShaderGroup.Shaders != null)
+                    foreach (ShaderFX sh in y.Drawable.ShaderGroup.Shaders.data_items)
+                    {
+                        if (sh == null || sh.ParametersList == null || sh.ParametersList.Parameters == null) continue;
+                        foreach (ShaderParameter sp in sh.ParametersList.Parameters)
+                        {
+                            TextureBase tb = sp.Data as TextureBase; if (tb == null || string.IsNullOrEmpty(tb.Name)) continue; if (tb is Texture) continue;          // (a texture inside the model)
+                            ImportHost.ProjTex pt; if (all.TryGetValue(tb.Name.ToLowerInvariant(), out pt) && pt.FromYtd) { int v; votes.TryGetValue(pt.File, out v); votes[pt.File] = v + 1; }
+                        }
+                    }
+            }
+            catch (Exception) { }
+            string best = null; int bv = 0; foreach (KeyValuePair<string, int> kv in votes) if (kv.Value > bv) { bv = kv.Value; best = kv.Key; }
+            return best;
+        }
 
         // ---------- one interior (one building): meshes, collision, portals, doors, textures, ytyp, ymap and manifest go into the stream folder ----------
-        static InteriorInfo WriteInterior(Dictionary<string, object> model, string outRoot, string stream, string work, List<string> log, List<string> files, List<string> warns, List<string> patchedFiles, ref long total, ref bool doorShipped)
+        static InteriorInfo WriteInterior(Dictionary<string, object> model, string outRoot, string stream, string work, List<string> log, List<string> files, List<string> warns, List<string> patchedFiles, ref long total, ref bool doorShipped) { return WriteInterior(model, outRoot, stream, work, log, files, warns, patchedFiles, ref total, ref doorShipped, new HashSet<string>()); }
+        // shippedFiles: model files (and archetypes, "arch|name") of the project already put in the resource by an earlier interior of the same export
+        static InteriorInfo WriteInterior(Dictionary<string, object> model, string outRoot, string stream, string work, List<string> log, List<string> files, List<string> warns, List<string> patchedFiles, ref long total, ref bool doorShipped, HashSet<string> shippedFiles)
         {
             string P = Safe(J.S(J.G(model, "prefix"), ""), "mlo1", 40) + "_";          // (developer_project, or the prefix typed in)
             if (P.EndsWith("__")) P = P.TrimEnd('_') + "_";
@@ -471,18 +502,44 @@ namespace MloCreator
                 if (groups.Count == 0) throw new Exception("Nothing to export: the project has no walls or floors yet.");
 
                 // ---- textures ----
-                List<TexData> texs = new List<TexData>();
+                List<TexData> texs = new List<TexData>(); int modelTex = 0;
                 foreach (object to in J.A(J.G(model, "textures")))
                 {
                     Dictionary<string, object> td = J.O(to);
                     TexData t = new TexData(); t.Name = Safe(J.S(J.G(td, "name"), "tex"), "tex", 34); t.Size = J.I(J.G(td, "size"), 256); t.Alpha = false;
                     string usage = J.S(J.G(td, "usage"), "DIFFUSE").ToUpperInvariant(); t.Usage = usage == "NORMAL" || usage == "SPECULAR" ? usage : "DIFFUSE";
+                    t.Fallback = J.B(J.G(td, "fallback"), false);
+                    // a texture of the imported model: the picture itself from the project's files (no bigger than "max"), with its own normal and specular maps
+                    Dictionary<string, object> src = J.O(J.G(td, "model"));
+                    if (src != null)
+                    {
+                        string sproj = J.S(J.G(src, "project"), ""), stex = J.S(J.G(src, "tex"), ""); int smax = Math.Max(16, Math.Min(4096, J.I(J.G(src, "max"), 1024)));
+                        Texture raw = null; try { raw = ImportHost.ProjectTexture(sproj, stex, smax); } catch (Exception) { }
+                        if (raw != null)
+                        {
+                            t.Raw = raw; t.Size = Math.Max((int)raw.Width, (int)raw.Height); texs.Add(t); modelTex++;
+                            string snrm = J.S(J.G(src, "normal"), ""), sspc = J.S(J.G(src, "spec"), "");
+                            Texture rn = null, rs = null; try { if (snrm.Length > 0) rn = ImportHost.ProjectTexture(sproj, snrm, smax); if (sspc.Length > 0) rs = ImportHost.ProjectTexture(sproj, sspc, smax); } catch (Exception) { }
+                            if (rn != null)
+                            {
+                                TexData tn = new TexData(); tn.Name = t.Name + "_n"; tn.Raw = rn; tn.Size = Math.Max((int)rn.Width, (int)rn.Height); tn.Usage = "NORMAL"; texs.Add(tn);
+                                if (rs != null) { TexData ts = new TexData(); ts.Name = t.Name + "_s"; ts.Raw = rs; ts.Size = Math.Max((int)rs.Width, (int)rs.Height); ts.Usage = "SPECULAR"; texs.Add(ts); }
+                                else texs.Add(Solid(t.Name + "_s", 16, Px(96, 96, 96, 255), false, "SPECULAR"));          // (a normal map without a specular map: a little shine)
+                            }
+                            else if (snrm.Length > 0) warns.Add("the normal map " + snrm + " of the model's texture " + stex + " is not in the project's files; a normal map made from the picture is used");
+                            continue;
+                        }
+                        warns.Add("the model's texture " + stex + " is not in the project's files any more, so its preview (" + t.Size + " x " + t.Size + ") is used");
+                    }
                     byte[] rgba = Convert.FromBase64String(J.S(J.G(td, "rgba"), ""));
                     if (rgba.Length != t.Size * t.Size * 4) throw new Exception("Texture " + t.Name + " has the wrong pixel data size.");
                     t.Argb = new int[t.Size * t.Size];
                     for (int i = 0; i < t.Argb.Length; i++) t.Argb[i] = Px(rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2], rgba[i * 4 + 3]);
                     texs.Add(t);
                 }
+                // a stand-in (a normal map made by the editor for a texture that has its own) goes when the real one came
+                { HashSet<string> real = new HashSet<string>(); foreach (TexData t in texs) if (!t.Fallback) real.Add(t.Name); texs.RemoveAll(delegate (TexData q) { return q.Fallback && real.Contains(q.Name); }); }
+                if (modelTex > 0) log.Add("textures of the imported model: " + modelTex + " (the pictures themselves from your files, not the previews)");
                 // placed window and door models (Models tool): baked to their size and place; windows join the interior's meshes, doors are props
                 FitResult fit = FitBake(model, P, groups, texs, ref needGlass, log, warns);
                 if (needGlass)
@@ -495,7 +552,7 @@ namespace MloCreator
                 foreach (GroupData g in groups) foreach (MatData m in g.Mats) if (!m.Glass && !have.Contains(m.Tex)) warns.Add("texture '" + m.Tex + "' was used but not supplied");
                 foreach (GroupData g in groups) foreach (MatData m in g.Mats) if (m.Nm && (!have.Contains(m.Tex + "_n") || !have.Contains(m.Tex + "_s"))) { m.Nm = false; warns.Add("texture '" + m.Tex + "' came without its normal or specular map, so it uses the plain shader"); }
                 string ddsDir = Path.Combine(work, "dds"); Directory.CreateDirectory(ddsDir);
-                foreach (TexData t in texs) Dds.Write(Path.Combine(ddsDir, P + t.Name + ".dds"), t.Argb, t.Size, t.Alpha);
+                foreach (TexData t in texs) { string dp = Path.Combine(ddsDir, P + t.Name + ".dds"); if (t.Raw != null) File.WriteAllBytes(dp, CodeWalker.Utils.DDSIO.GetDDSFile(t.Raw)); else Dds.Write(dp, t.Argb, t.Size, t.Alpha); }
                 string txdXml = TxdXml(texs, P);
 
                 // ---- collision ----
@@ -605,7 +662,49 @@ namespace MloCreator
                     log.Add("door models placed: " + fit.Doors.Count);
                 }
 
-                XmlDocument ytypDoc = new XmlDocument(); ytypDoc.LoadXml(YtypXml(P, mlo, txd, groups, portals, bmn, bmx, timecycle, doors, doorArch));
+                // ---- props placed with the Place props tool: the game's models (their type files become dependencies), or models of the project shipped with the resource ----
+                List<DoorData> props = new List<DoorData>(); List<string> deps = new List<string>(); List<string> propLines = new List<string>();
+                {
+                    string pproj = J.S(J.G(model, "propProject"), ""); Dictionary<string, int> count = new Dictionary<string, int>(); StringBuilder pa = new StringBuilder();
+                    foreach (object o in J.A(J.G(model, "props")))
+                    {
+                        Dictionary<string, object> pd = J.O(o); string pn = Safe(J.S(J.G(pd, "name"), ""), "", 64); if (pn.Length == 0) continue;
+                        DoorData d = new DoorData(); d.Name = pn; d.X = J.D(J.G(pd, "x"), 0); d.Y = J.D(J.G(pd, "y"), 0); d.Z = J.D(J.G(pd, "z"), 0); d.Heading = J.D(J.G(pd, "heading"), 0); props.Add(d);
+                        int c0; count.TryGetValue(pn, out c0); count[pn] = c0 + 1;
+                    }
+                    List<string> unknown = new List<string>(), noType = new List<string>();
+                    foreach (KeyValuePair<string, int> kv in count)
+                    {
+                        string pn = kv.Key, yt = Interiors.YtypOf(JenkHash.GenHash(pn));
+                        if (yt != null) { if (!deps.Contains(yt)) deps.Add(yt); propLines.Add("`" + pn + "` x" + kv.Value + " (the game's, defined in `" + yt + ".ytyp`)"); continue; }
+                        string src = pproj.Length > 0 ? Path.Combine(ImportHost.FilesDir(pproj), pn + ".ydr") : null;
+                        if (src != null && File.Exists(src))
+                        {
+                            // a model of your own: the resource carries it (and the texture file it uses) and defines it
+                            string ptxd = "";
+                            try
+                            {
+                                YdrFile pyd = new YdrFile(); pyd.Load(File.ReadAllBytes(src));
+                                string ytdName = PropYtd(pproj, pn, pyd); if (ytdName != null) { ptxd = Path.GetFileNameWithoutExtension(ytdName); if (shippedFiles.Add(ytdName.ToLowerInvariant())) total += Save(Path.Combine(stream, ytdName), File.ReadAllBytes(Path.Combine(ImportHost.FilesDir(pproj), ytdName)), files); }
+                                if (shippedFiles.Add((pn + ".ydr").ToLowerInvariant())) total += Save(Path.Combine(stream, pn + ".ydr"), File.ReadAllBytes(src), files);
+                                if (shippedFiles.Add("arch|" + pn))          // (defined once, in the first interior that places it: every type file of the resource is loaded, so the others find it)
+                                {
+                                    V3 a = new V3(pyd.Drawable.BoundingBoxMin.X, pyd.Drawable.BoundingBoxMin.Y, pyd.Drawable.BoundingBoxMin.Z), b = new V3(pyd.Drawable.BoundingBoxMax.X, pyd.Drawable.BoundingBoxMax.Y, pyd.Drawable.BoundingBoxMax.Z);
+                                    pa.Append(DrawableArch(pn, ptxd, 100, a, b));
+                                }
+                                propLines.Add("`" + pn + "` x" + kv.Value + " (your own model, shipped in stream/" + (ptxd.Length > 0 ? " with `" + ptxd + ".ytd`" : "") + ")");
+                            }
+                            catch (Exception ex) { warns.Add("the prop model " + pn + ".ydr could not be read: " + ex.Message); }
+                            continue;
+                        }
+                        if (Interiors.ArchetypeListMissing) noType.Add(pn); else unknown.Add(pn);
+                        propLines.Add("`" + pn + "` x" + kv.Value + (Interiors.ArchetypeListMissing ? " (type file not known)" : " (not found in the game)"));
+                    }
+                    if (noType.Count > 0) warns.Add("Which game type file defines " + string.Join(", ", noType.ToArray()) + " is not known (the list of the game's models is built with the game's interior list, on the Game interiors page). Props whose type file is always loaded still show; others need that list: build it and export again.");
+                    if (unknown.Count > 0) warns.Add("No type file of the game defines " + string.Join(", ", unknown.ToArray()) + ", and the project has no model file of that name: those props will not show.");
+                    if (props.Count > 0) { log.Add("props placed: " + props.Count + " (" + count.Count + " different models), type files they need: " + (deps.Count > 0 ? string.Join(", ", deps.ToArray()) : "none")); doorArch = (doorArch ?? "") + pa.ToString(); if (doorArch.Length == 0) doorArch = null; }
+                }
+                XmlDocument ytypDoc = new XmlDocument(); ytypDoc.LoadXml(YtypXml(P, mlo, txd, groups, portals, bmn, bmx, timecycle, doors, doorArch, props));
                 total += Save(Path.Combine(stream, P + "types.ytyp"), XmlMeta.GetRSCData(ytypDoc), files);
                 log.Add("portals: " + portals.Count);
 
@@ -615,7 +714,7 @@ namespace MloCreator
                 XmlDocument ymapDoc = new XmlDocument(); ymapDoc.LoadXml(YmapXml(P + "milo_", mlo, px, py, pz, qz, qw, emn, emx, onSets));
                 total += Save(Path.Combine(stream, P + "milo_.ymap"), XmlMeta.GetRSCData(ymapDoc), files);
 
-                XmlDocument mfDoc = new XmlDocument(); mfDoc.LoadXml(ManifestXml(P, mlo));
+                XmlDocument mfDoc = new XmlDocument(); mfDoc.LoadXml(ManifestXml(P, mlo, deps));
                 total += Save(Path.Combine(stream, "_manifest_" + P.TrimEnd('_') + ".ymf"), XmlMeta.GetPSOData(mfDoc), files);
 
                 // ---- vanilla house: cut the game's own door, window panes, solid collision and occluders ----
@@ -642,7 +741,7 @@ namespace MloCreator
                 // a timecycle modifier of the project's own: written into the resource's timecycle file, and the room uses it
                 Dictionary<string, object> tcm = J.O(J.G(model, "tcmod"));
                 if (tcm != null && J.O(J.G(tcm, "vars")) != null) { info.TcName = Safe(J.S(J.G(tcm, "name"), P + "tc"), P + "tc", 60); info.TcXml = Timecycles.ModifierXml(info.TcName, J.O(J.G(tcm, "vars"))); }
-                foreach (GroupData g in groups) if (g.Set != null && !info.Sets.Contains(P + g.Set)) info.Sets.Add(P + g.Set); info.DefaultSet = onSets.Count > 0 ? onSets[0] : null; info.P = P; info.Label = label; info.Mlo = mlo; info.X = px; info.Y = py; info.Z = pz; info.Heading = hd; info.Doors = doors.Count; info.DoorName = doorName; info.EntranceNote = J.S(J.G(model, "entranceNote"), "none set"); info.Credits = fit.Credits; info.DoorLines = doorLines;
+                foreach (GroupData g in groups) if (g.Set != null && !info.Sets.Contains(P + g.Set)) info.Sets.Add(P + g.Set); info.DefaultSet = onSets.Count > 0 ? onSets[0] : null; info.P = P; info.Label = label; info.Mlo = mlo; info.X = px; info.Y = py; info.Z = pz; info.Heading = hd; info.Doors = doors.Count; info.DoorName = doorName; info.EntranceNote = J.S(J.G(model, "entranceNote"), "none set"); info.Credits = fit.Credits; info.DoorLines = doorLines; info.PropLines = propLines;
                 return info;
             }
         }
@@ -664,11 +763,11 @@ namespace MloCreator
                 // the first interior is the model itself, the others (more buildings of the same project) come in "more"
                 List<Dictionary<string, object>> interiors = new List<Dictionary<string, object>>(); interiors.Add(model);
                 foreach (object mo in J.A(J.G(model, "more"))) { Dictionary<string, object> md = J.O(mo); if (md != null) interiors.Add(md); }
-                List<InteriorInfo> infos = new List<InteriorInfo>(); long total = 0; bool doorShipped = false;
+                List<InteriorInfo> infos = new List<InteriorInfo>(); long total = 0; bool doorShipped = false; HashSet<string> shipped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (Dictionary<string, object> im in interiors)
                 {
                     if (interiors.Count > 1) log.Add("---- " + J.S(J.G(im, "label"), "building") + " ----");
-                    infos.Add(WriteInterior(im, outRoot, stream, work, log, files, warns, patchedFiles, ref total, ref doorShipped));
+                    infos.Add(WriteInterior(im, outRoot, stream, work, log, files, warns, patchedFiles, ref total, ref doorShipped, shipped));
                 }
                 if (interiors.Count > 1) log.Add("---- the model files ----");
 
@@ -732,6 +831,7 @@ namespace MloCreator
                 { List<string> dls = new List<string>(); foreach (InteriorInfo ii in infos) foreach (string d1 in ii.DoorLines) dls.Add(d1); if (dls.Count > 0) rd.Append("\n## Doors you placed (for your door script)\n\nThese doors are props of their own with the same object flags and a box collision like the game's own doors, so a door script (ox_doorlock, the game's door system...) can find and swing them. Give the script the model and the hinge position:\n\n- " + string.Join("\n- ", dls.ToArray()) + "\n"); }
                 { List<string> sl = new List<string>(); InteriorInfo first = null; foreach (InteriorInfo ii in infos) foreach (string sn in ii.Sets) { sl.Add("`" + sn + "`" + (sn == ii.DefaultSet ? " (on by default)" : "")); if (first == null) first = ii; }
                   if (sl.Count > 0) rd.Append("\n## Wall colours (entity sets)\n\nEach colour scheme is an entity set of the interior; the one marked default is on when the interior loads. Switch them from your own script, for example:\n\n```lua\nlocal id = GetInteriorAtCoords(" + F(Math.Round(first.X, 2)) + ", " + F(Math.Round(first.Y, 2)) + ", " + F(Math.Round(first.Z + 1, 2)) + ")\nDeactivateInteriorEntitySet(id, '" + (first.DefaultSet ?? first.Sets[0]) + "')\nActivateInteriorEntitySet(id, '" + first.Sets[first.Sets.Count - 1] + "')\nRefreshInterior(id)\n```\n\nOnly one colour set should be on at a time (two would draw the same walls twice).\n\n- " + string.Join("\n- ", sl.ToArray()) + "\n"); }
+                { List<string> pls = new List<string>(); foreach (InteriorInfo ii in infos) foreach (string l1 in ii.PropLines) pls.Add((infos.Count > 1 ? ii.Label + ": " : "") + l1); if (pls.Count > 0) rd.Append("\n## Props placed inside\n\nThe props you placed are entities of the interior (room 1), so they stream with it. The game's own models need the type file that defines them: those are listed in the interior's manifest (`_manifest_....ymf`) so the game loads them with the interior. Your own models are in stream/ with a definition in the interior's type file.\n\n- " + string.Join("\n- ", pls.ToArray()) + "\n"); }
                 if (plantNames.Count > 0) rd.Append("\n## Props and plants hidden\n\nThe game's map places bushes, trees, weeds and other props (bins, boxes, fences...) as objects of their own. These were taken out in the editor (they stand inside the rooms or in front of the windows and doors, or were picked by hand). `client/plants.lua` hides each one (`CreateModelHide`, a 0.6 m radius around the spot, so the same model elsewhere stays). No map file is replaced. Delete the line of a plant in that file to get it back:\n\n- " + string.Join("\n- ", plantNames.ToArray()) + "\n");
                 if (patchedFiles.Count > 0) rd.Append("\n## Game files this resource replaces\n\nThese files in stream/ are the game's own files with the openings you cut (model triangles, collision polygons, occluders) taken out; everything else is unchanged. Only one copy of a file with a given name can load: if another resource on your server ships a file with the same name, they conflict. Delete a file here and that cut goes away.\n\n- " + string.Join("\n- ", patchedFiles.ToArray()) + "\n");
                 WriteText(Path.Combine(dir, "README.md"), rd.ToString());

@@ -16,6 +16,7 @@ namespace MloCreator
         public string[] Comps; public int[] Sizes; public bool[] IsInt;
         public int Stride, PosOff = -1, NrmOff = -1, UvOff = -1, TanOff = -1;
         public float[] V; public int[] Idx; public string Tex = "", ShaderName = "";
+        public string Bump = "", Spec = ""; public double BumpAmt = double.NaN, SpecAmt = double.NaN, SpecFall = double.NaN;      // the shader's normal map and specular map, and how strong they are (NaN: not set)
         public string VText, IText;                     // the XML text as loaded, put back for geometries nobody changed
         public int VertCount { get { return Stride == 0 ? 0 : V.Length / Stride; } }
     }
@@ -82,6 +83,7 @@ namespace MloCreator
     {
         public string Name, TexDir; public XmlDocument Doc; public List<GeomData> Geoms = new List<GeomData>();
         public List<string> ShaderNames = new List<string>(); public List<string> ShaderTex = new List<string>(); public List<int> ShaderBucket = new List<int>();
+        public List<string> ShaderBump = new List<string>(), ShaderSpec = new List<string>(); public List<double[]> ShaderAmt = new List<double[]>();      // per shader: normal map, specular map, { bumpiness, specular intensity, specular falloff }
         static readonly char[] WS = new char[] { ' ', '\t', '\r', '\n' };
 
         static void CompInfo(string name, out int size, out bool isInt)
@@ -93,6 +95,13 @@ namespace MloCreator
             if (name == "Tangent" || name == "Binormal" || name == "BlendWeights") { size = 4; return; }
             if (name == "BlendIndices") { size = 4; isInt = true; return; }
             throw new Exception("The model uses a vertex component this program cannot cut (" + name + ").");
+        }
+
+        // a shader setting's first number (<Item name="bumpiness" type="Vector" x="1" ... />), NaN when the shader does not have it
+        static double ParamX(XmlNode sh, string name)
+        {
+            XmlNode p = sh.SelectSingleNode("Parameters/Item[@name='" + name + "']"); if (p == null || p.Attributes["x"] == null) return double.NaN;
+            double v; return double.TryParse(p.Attributes["x"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out v) ? v : double.NaN;
         }
 
         public static ModelDoc Load(byte[] ydrBytes, string texDir, string name)
@@ -108,6 +117,9 @@ namespace MloCreator
                 if (df == null) df = sh.SelectSingleNode("Parameters/Item[@type='Texture']/Name");
                 md.ShaderNames.Add(n == null ? "" : n.InnerText); md.ShaderTex.Add(df == null ? "" : df.InnerText.Trim());
                 int b = 0; if (rb != null && rb.Attributes["value"] != null) int.TryParse(rb.Attributes["value"].Value, out b); md.ShaderBucket.Add(b);
+                XmlNode bn = sh.SelectSingleNode("Parameters/Item[@name='BumpSampler']/Name"), sn = sh.SelectSingleNode("Parameters/Item[@name='SpecSampler']/Name");
+                md.ShaderBump.Add(bn == null ? "" : bn.InnerText.Trim()); md.ShaderSpec.Add(sn == null ? "" : sn.InnerText.Trim());
+                md.ShaderAmt.Add(new double[] { ParamX(sh, "bumpiness"), ParamX(sh, "specularIntensityMult"), ParamX(sh, "specularFalloffMult") });
             }
             XmlNodeList lods = md.Doc.SelectNodes("/Drawable/*");
             foreach (XmlNode ln in lods)
@@ -122,7 +134,11 @@ namespace MloCreator
                     {
                         GeomData g = new GeomData(); g.Lod = lod; g.Model = mi; g.Index = gi; g.Node = gn;
                         XmlNode si = gn.SelectSingleNode("ShaderIndex"); g.Shader = si != null ? int.Parse(si.Attributes["value"].Value, CultureInfo.InvariantCulture) : 0;
-                        if (g.Shader >= 0 && g.Shader < md.ShaderNames.Count) { g.ShaderName = md.ShaderNames[g.Shader]; g.Tex = md.ShaderTex[g.Shader]; g.Bucket = md.ShaderBucket[g.Shader]; }
+                        if (g.Shader >= 0 && g.Shader < md.ShaderNames.Count)
+                        {
+                            g.ShaderName = md.ShaderNames[g.Shader]; g.Tex = md.ShaderTex[g.Shader]; g.Bucket = md.ShaderBucket[g.Shader];
+                            g.Bump = md.ShaderBump[g.Shader]; g.Spec = md.ShaderSpec[g.Shader]; double[] am = md.ShaderAmt[g.Shader]; g.BumpAmt = am[0]; g.SpecAmt = am[1]; g.SpecFall = am[2];
+                        }
                         XmlNode lay = gn.SelectSingleNode("VertexBuffer/Layout"); XmlNode data = gn.SelectSingleNode("VertexBuffer/Data"), idx = gn.SelectSingleNode("IndexBuffer/Data");
                         if (lay == null || data == null || idx == null) { gi++; continue; }
                         List<string> comps = new List<string>(); List<int> sizes = new List<int>(); List<bool> ints = new List<bool>(); int stride = 0;

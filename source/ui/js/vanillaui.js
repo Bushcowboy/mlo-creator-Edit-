@@ -154,6 +154,11 @@ window.MLO = window.MLO || {};
         const P = S.project, k = kit();
         root.append(el('div', { class: 'h' }, 'Paint'), el('div', { class: 'note' }, 'Walls: click a wall face. Floors: drag a rectangle with the Floor paint tool (key 7) or set the whole floor below. Pick a texture in the bench underneath.'));
         root.append(el('div', { class: 'row' }, k.seg([['wall', 'Walls'], ['floor', 'Floors']], S.paintTarget === 'floor' ? 'floor' : 'wall', v => { S.paintTarget = v; S.shellTool = v === 'floor' ? 'floor' : 'paint'; S.benchSel = S.brush[v]; M.App.refreshPanels(); })));
+        // the imported model's own textures can be painted with too (the bench's "From the model")
+        const mt = TEX.modelList ? TEX.modelList() : [];
+        if (mt.length) root.append(el('div', { class: 'h' }, 'From the model'), el('div', { class: 'note' }, mt.length + ' texture' + (mt.length === 1 ? '' : 's') + ' of your imported files can go on your walls, floors and ceilings, at the size ' + (mt.length === 1 ? 'it has' : 'they have') + ' on the model' + (mt.some(t => t.normal) ? ', with their own normal maps' : '') + '. The export puts the pictures themselves in the resource.'),
+            el('div', { class: 'row wrap' }, ...mt.slice(0, 8).map(t => el('span', { title: t.name + (TEX.whereOnModel(t) ? ' (on the model\'s ' + TEX.whereOnModel(t) + ')' : ''), style: { cursor: 'pointer' }, onclick: () => { S.benchCat = TEX.MODEL_CAT; S.benchSel = t.id; S.brush[S.paintTarget] = t.id; M.App.refreshPanels(); } }, k.swatchEl(t.id, 30))),
+                el('button', { class: 'btn sm', onclick: () => { S.benchCat = TEX.MODEL_CAT; M.App.refreshPanels(); } }, 'Show them in the bench')));
         root.append(el('div', { class: 'h' }, 'Project theme'), el('div', { class: 'note' }, 'What every unpainted surface looks like. Pick a texture below, then press Set.'));
         DEFAULT_ROWS.forEach(r => root.append(el('div', { class: 'defrow' }, k.swatchEl(P.defaults[r[0]], 22), el('span', null, r[1]),
             el('button', { class: 'btn sm', onclick: () => { Model.edit(PP => { PP.defaults[r[0]] = S.benchSel || S.brush[S.paintTarget]; }); M.App.refreshPanels(); } }, 'Set'))));

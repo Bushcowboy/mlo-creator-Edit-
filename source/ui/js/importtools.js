@@ -88,6 +88,7 @@ window.MLO = window.MLO || {};
         else if (t === 'plants') { M.Plants.tool.scan(e, ray); }
         else if (t === 'light') { const g = SH.ground(e); hover.g = g; }
         else if (t === 'column' || t === 'beam') { M.Structure.scan(e, SH.ground(e)); }
+        else if (t === 'furnish') { M.Props.scan(e, SH.ground(e)); }
         else if (t === 'level') { hover.mh = IM.pick(ray); hover.gz = !lvl && gizmoHit(ray); }
         else if (t === 'fill') { hover.g = SH.ground(e); hover.shift = !!e.shiftKey; }
         else if (t === 'figure') { hover.fs = M.Figure.spot(ray, IM.pick); hover.fh = M.Figure.hit(ray, S.figure, api().rayBox); }
@@ -120,7 +121,7 @@ window.MLO = window.MLO || {};
         if (t === 'eraser') {
             if (hover.cut) { const id = hover.cut.k.id; Model.edit(P => { IM.removeCutterIn(P, id); }); if (S.cutSel === id) S.cutSel = null; bus.emit('cutsel'); return; }
             const g = SH.ground(e);
-            if (g) { const i = (S.project.shell.lights || []).findIndex(l => Math.hypot(l.x - g.rx, l.y - g.ry) < 0.45); if (i >= 0) { Model.edit(P => { P.shell.lights.splice(i, 1); }); return; } if (M.Structure && M.Structure.erase(g.rx, g.ry)) { M.UI.renderLeft(); return; } }
+            if (g) { const i = (S.project.shell.lights || []).findIndex(l => Math.hypot(l.x - g.rx, l.y - g.ry) < 0.45); if (i >= 0) { Model.edit(P => { P.shell.lights.splice(i, 1); }); return; } if (M.Structure && M.Structure.erase(g.rx, g.ry)) { M.UI.renderLeft(); return; } if (M.Props && M.Props.erase(g.rx, g.ry)) { M.UI.renderLeft(); return; } }
             SH.down(e); return;
         }
         if (t === 'frame') { frameClick(e); return; }
@@ -136,6 +137,7 @@ window.MLO = window.MLO || {};
             S.partSel = { f: o.file, g: o.g }; M.UI.renderLeft(); return;
         }
         if (t === 'column' || t === 'beam') { M.Structure.down(e, t); return; }
+        if (t === 'furnish') { M.Props.down(e); return; }
         if (t === 'light') {
             const g = hover.g; if (!g) return;
             Model.edit(P => {
@@ -249,6 +251,7 @@ window.MLO = window.MLO || {};
         if (fd) { figureMove(); return; }
         if (cbd) { cbMove(e); return; }
         if (M.FitModels.dragging()) { M.FitModels.move(e); return; }
+        if (M.Props && M.Props.dragging()) return;                                  // (scan moved it)
         if (rd) { roomMove(e); return; }
         if (lvl) { levelMove(e); return; }
         if (!drag) { if (S.shellTool === 'room' || S.shellTool === 'cut' || S.shellTool === 'part' || S.shellTool === 'floor' || S.shellTool === 'paint') SH.move(e); return; }
@@ -266,6 +269,7 @@ window.MLO = window.MLO || {};
         if (fd) { figureEnd(true); return; }
         if (cbd) { cbEnd(true); return; }
         if (M.FitModels.dragging()) { M.FitModels.up(e, true); return; }
+        if (M.Props && M.Props.dragging()) { M.Props.up(e); return; }
         if (rd) { roomEnd(true); return; }
         if (lvl) { levelEnd(true); return; }
         if (drag) {
@@ -1090,6 +1094,8 @@ window.MLO = window.MLO || {};
             const g = hover && hover.g; if (g) { R.ovBox([g.rx - 0.12, g.ry - 0.12, S.project.settings.ceilH - 0.35], [g.rx + 0.12, g.ry + 0.12, S.project.settings.ceilH - 0.12], [1, 0.9, 0.5, 0.5], C.selEdge); }
         } else if (t === 'column' || t === 'beam') {
             const r = M.Structure.draw(R, t); if (r) { text = r.text; at = r.at; }
+        } else if (t === 'furnish') {
+            const r = M.Props.draw(R); if (r) { text = r.text; at = r.at; }
         } else if (t === 'fit') {
             const r = M.FitModels.draw(R); if (r) { text = r.text; at = r.at; }
         } else if (t === 'plants') {
@@ -1100,7 +1106,7 @@ window.MLO = window.MLO || {};
         if (t === 'select') drawRoomSel(R); else M.App.canvas.style.cursor = t === 'cbox' ? cbCursor() : '';
     }
 
-    const KEYS = { '8': 'column', '9': 'beam', o: 'frame', l: 'light', f: 'faces', b: 'building', g: 'level', j: 'fill', h: 'figure', k: 'edges', p: 'parts', m: 'collision', n: 'cbox', u: 'walk', i: 'fit', y: 'plants' };
+    const KEYS = { '8': 'column', '9': 'beam', '0': 'furnish', o: 'frame', l: 'light', f: 'faces', b: 'building', g: 'level', j: 'fill', h: 'figure', k: 'edges', p: 'parts', m: 'collision', n: 'cbox', u: 'walk', i: 'fit', y: 'plants' };
     function toggleCutaway() {
         IM.cutOn = !IM.cutOn; IM.applyCut(); M.UI.renderLeft(); M.UI.renderRight();
         toast(IM.cutOn ? 'Cutaway on: the model is hidden above ' + IM.cutH().toFixed(2) + ' m. C turns it off.' : 'Cutaway off.', 'ok');
@@ -1150,6 +1156,7 @@ window.MLO = window.MLO || {};
     // keys with modifiers (Blender's): Alt+A select none, Ctrl+I invert, Ctrl+L grow to whole pieces, Shift+G select the same texture. true = handled
     function keyEv(e, k) {
         if (S.shellTool === 'fit' && S.tab === 'build') return M.FitModels.keyEv(e, k);
+        if (S.shellTool === 'furnish' && S.tab === 'build' && M.Props) return M.Props.keyEv(e, k);
         if (S.shellTool === 'plants' && S.tab === 'build') return M.Plants.tool.keyEv(e, k);
         if (S.shellTool === 'collision' && S.tab === 'build') {
             if (e.altKey && k === 'a') { colNone(); return true; }

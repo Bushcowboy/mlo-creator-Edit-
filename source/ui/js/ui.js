@@ -156,15 +156,25 @@ window.MLO = window.MLO || {};
         const chips = el('div', { class: 'chips' }); cats.forEach(c => chips.append(el('button', { class: 'chip' + (S.benchCat === c ? ' on' : ''), onclick: () => { S.benchCat = c; renderBench(); } }, c)));
         if (S.project.kind === 'import') chips.append(el('label', { class: 'chip', style: { cursor: 'pointer' }, title: 'Use a picture of your own (png, jpg) as a texture' }, '+ Add an image',
             el('input', { type: 'file', accept: 'image/*', style: { display: 'none' }, onchange: (e) => { addUserImage(e.target.files[0]); e.target.value = ''; } })));
-        const grid = el('div', { class: 'sw-grid' });
-        TEX.list.filter(x => S.benchCat === 'All' || x.cat === S.benchCat).forEach(x => {
-            grid.append(el('div', { class: 'sw' + (x.id === S.benchSel ? ' on' : ''), title: x.name, onclick: () => { S.benchSel = x.id; S.brush[S.paintTarget] = x.id; M.App.refreshPanels(); } }, swatchEl(x.id, 64), el('span', null, x.name)));
-        });
+        const grid = el('div', { class: 'sw-grid' }), pick = (id) => { S.benchSel = id; S.brush[S.paintTarget] = id; M.App.refreshPanels(); };
+        const cell = (x) => el('div', { class: 'sw' + (x.id === S.benchSel ? ' on' : ''), title: x.name + (x.kind === 'model' ? ' (on the model\'s ' + (TEX.whereOnModel(x) || 'faces') + ', ' + x.uses + ' triangles)' : ''), onclick: () => pick(x.id) }, swatchEl(x.id, 64), el('span', null, x.name));
+        TEX.list.filter(x => S.benchCat === 'All' || x.cat === S.benchCat).forEach(x => grid.append(cell(x)));
+        // the model's own textures: the program's textures closest in colour too (they come with normal maps made for them)
+        let close = null;
+        if (S.benchCat === TEX.MODEL_CAT && TEX.modelList().length) {
+            const ref = t.kind === 'model' ? t : TEX.modelList()[0], g2 = el('div', { class: 'sw-grid' });
+            TEX.nearest(ref.id, 6).forEach(id => g2.append(cell(TEX.def(id))));
+            close = el('div', null, el('div', { class: 'note', style: { margin: '8px 0 4px' } }, 'Close to "' + ref.name + '" among the program\'s textures:'), g2);
+        }
+        const tileRow = (t.kind === 'user')
+            ? el('div', { class: 'note' }, 'repeats every ', el('input', { type: 'number', step: '0.1', min: '0.2', max: '8', value: t.tile, style: { width: '58px' }, onchange: (e) => { const v = Math.min(8, Math.max(0.2, parseFloat(e.target.value) || 1)); t.tile = v; if (S.ref && S.ref.tex) S.ref.tex.forEach(q => { if (q.id === t.id) q.tile = v; }); Model.saveRef().catch(() => { }); M.App.remesh(); } }), ' m')
+            : (t.kind === 'model'
+                ? el('div', { class: 'note' }, 'From the model' + (TEX.whereOnModel(t) ? ' (its ' + TEX.whereOnModel(t) + ')' : '') + ' · ' + t.w + ' x ' + t.h + ' · repeats every ', el('input', { type: 'number', step: '0.05', min: '0.05', max: '50', value: Math.round(TEX.tile(t.id) * 100) / 100, style: { width: '62px' }, title: t.est ? 'Measured on the model: ' + t.est.toFixed(2) + ' m' : 'The model does not say', onchange: (e) => { const v = Math.min(50, Math.max(0.05, parseFloat(e.target.value) || t.tile)); Model.edit(P => { P.import.texTile = Object.assign({}, P.import.texTile || {}); if (Math.abs(v - t.tile) < 1e-4) delete P.import.texTile[t.src]; else P.import.texTile[t.src] = v; }); M.App.refreshPanels(); } }), ' m',
+                    t.est ? ' (as on the model: ' + t.est.toFixed(2) + ' m)' : '', el('br'), t.normal ? 'Its own normal and specular maps go with it.' : 'No normal map of its own: one is made from the picture.', el('br'), 'The export copies the picture itself (up to 1024 px) from your files.')
+                : el('div', { class: 'note' }, t.cat + ' · repeats every ' + t.tile + ' m'));
         b.append(el('div', { class: 'bench' },
-            el('div', { class: 'cur' }, el('div', { class: 'h' }, 'Texture'), big, (S.project.look && S.project.look.normalMaps === false) ? null : el('div', { class: 'note', style: { display: 'flex', gap: '6px', alignItems: 'center', margin: '4px 0' } }, TEX.mapSwatch(S.benchSel, 'normal', 40), TEX.mapSwatch(S.benchSel, 'spec', 40), 'normal · specular'), el('div', null, el('b', null, t.name), t.kind === 'user'
-                ? el('div', { class: 'note' }, 'repeats every ', el('input', { type: 'number', step: '0.1', min: '0.2', max: '8', value: t.tile, style: { width: '58px' }, onchange: (e) => { const v = Math.min(8, Math.max(0.2, parseFloat(e.target.value) || 1)); t.tile = v; if (S.ref && S.ref.tex) S.ref.tex.forEach(q => { if (q.id === t.id) q.tile = v; }); Model.saveRef().catch(() => { }); M.App.remesh(); } }), ' m')
-                : el('div', { class: 'note' }, t.cat + ' · repeats every ' + t.tile + ' m'))),
-            el('div', null, chips, grid)));
+            el('div', { class: 'cur' }, el('div', { class: 'h' }, 'Texture'), big, (S.project.look && S.project.look.normalMaps === false) ? null : el('div', { class: 'note', style: { display: 'flex', gap: '6px', alignItems: 'center', margin: '4px 0' } }, TEX.mapSwatch(S.benchSel, 'normal', 40), TEX.mapSwatch(S.benchSel, 'spec', 40), 'normal · specular'), el('div', null, el('b', null, t.name), tileRow)),
+            el('div', null, chips, grid, close)));
     }
 
     // ---------- left: export ----------

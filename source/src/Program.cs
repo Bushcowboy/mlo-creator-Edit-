@@ -293,7 +293,37 @@ namespace MloCreator
                 Dictionary<string, object> body = Json.DeserializeObject(ReadBody(c)) as Dictionary<string, object>; List<string> names = new List<string>();
                 foreach (object o in J.A(J.G(body, "names"))) names.Add(J.S(o, ""));
                 string gta = J.S(J.G(body, "gta"), null); if (string.IsNullOrWhiteSpace(gta)) gta = GtaDefault();
-                r["models"] = ImportHost.PropModels(names, gta); Json200(c, r); return;
+                r["models"] = ImportHost.PropModels(proj, names, gta); Json200(c, r); return;
+            }
+            if (api == "prop-suggest" && method == "POST")
+            {
+                // the props the Place props tool offers: what = files | near | archive | interiors (the game's interiors near the building) | interior (one of them: key) | search (q)
+                Dictionary<string, object> body = Json.DeserializeObject(ReadBody(c)) as Dictionary<string, object>; string what = J.S(J.G(body, "what"), "files"), target = J.S(J.G(body, "target"), "");
+                string gta = J.S(J.G(body, "gta"), null); if (string.IsNullOrWhiteSpace(gta)) gta = GtaDefault();
+                r["what"] = what; r["index"] = Interiors.Ready; r["indexBusy"] = Interiors.Busy;
+                if (what == "files") r["items"] = Assets.FromFiles(proj, target, gta);
+                else if (what == "near") r["items"] = Assets.Near(proj, target, gta, J.O(J.G(body, "entity")));
+                else if (what == "archive") { Dictionary<string, object> a = Assets.Archive(target, gta); foreach (KeyValuePair<string, object> kv in a) r[kv.Key] = kv.Value; }
+                else if (what == "search") { Dictionary<string, object> a = Assets.Search(J.S(J.G(body, "q"), ""), gta, J.I(J.G(body, "max"), 150)); foreach (KeyValuePair<string, object> kv in a) r[kv.Key] = kv.Value; }
+                else if (what == "interiors" || what == "interior")
+                {
+                    if (!Interiors.Ready)
+                    {
+                        // the list of the game's interiors (and of which type file defines each model) is made in the background, the first time in a few minutes
+                        if (string.IsNullOrWhiteSpace(gta) || !File.Exists(Path.Combine(gta, "GTA5.exe"))) r["error"] = "GTA V was not found" + (string.IsNullOrWhiteSpace(gta) ? "" : " in \"" + gta + "\"") + ": set the game's folder (Import tab, or the Game interiors page).";
+                        else Interiors.StartIndex(gta, Path.Combine(Root, "cache"), false);
+                        r["items"] = new List<object>(); r["index"] = Interiors.Ready; r["indexBusy"] = Interiors.Busy; r["status"] = Interiors.Status; Json200(c, r); return;
+                    }
+                    if (what == "interior") { Dictionary<string, object> a = Interiors.Props(J.S(J.G(body, "key"), "")); foreach (KeyValuePair<string, object> kv in a) r[kv.Key] = kv.Value; }
+                    else
+                    {
+                        Dictionary<string, object> en = J.O(J.G(body, "entity")); string q = J.S(J.G(body, "q"), "").Trim();
+                        if (q.Length > 0) { Dictionary<string, object> l = Interiors.List(q, 30); r["items"] = l["items"]; }
+                        else r["items"] = en == null ? new List<object>() : Interiors.Near(J.D(J.G(en, "x"), 0), J.D(J.G(en, "y"), 0), 600, 12);
+                    }
+                }
+                else { Reply(c, 400, "{\"ok\":false,\"error\":\"unknown kind of suggestion\"}", "application/json"); return; }
+                Json200(c, r); return;
             }
             if (api == "game-props" && method == "POST")
             {

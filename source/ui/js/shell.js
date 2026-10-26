@@ -94,10 +94,10 @@ window.MLO = window.MLO || {};
             const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
             let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
             const l = Math.hypot(nx, ny, nz); if (l < 1e-12) return; nx /= l; ny /= l; nz /= l;
-            const tile = glass ? 1 : TEX.tile(tex), ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz), base = m.pos.length / 3;
+            const tile = glass ? 1 : TEX.tile(tex), tv = glass ? 1 : TEX.tileV(tex), ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz), base = m.pos.length / 3;
             [a, b, c, d].forEach(p => {
                 m.pos.push(p[0], p[1], p[2]); m.nrm.push(nx, ny, nz);
-                if (ax >= ay && ax >= az) m.uv.push(p[1] / tile, -p[2] / tile); else if (ay >= ax && ay >= az) m.uv.push(p[0] / tile, -p[2] / tile); else m.uv.push(p[0] / tile, p[1] / tile);
+                if (ax >= ay && ax >= az) m.uv.push(p[1] / tile, -p[2] / tv); else if (ay >= ax && ay >= az) m.uv.push(p[0] / tile, -p[2] / tv); else m.uv.push(p[0] / tile, p[1] / tv);
                 for (let q = 0; q < 3; q++) { if (p[q] < bmn[q]) bmn[q] = p[q]; if (p[q] > bmx[q]) bmx[q] = p[q]; }
             });
             m.idx.push(base, base + 1, base + 2, base + 2, base + 3, base); stats.tris += 2;
@@ -108,10 +108,10 @@ window.MLO = window.MLO || {};
             if (!m || m.pos.length / 3 + 3 > MAXV) { m = { level: 0, kind, group, tex, glass: false, pos: [], nrm: [], uv: [], idx: [] }; acc.set(key, m); batches.push(m); }
             const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
             let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; const l = Math.hypot(nx, ny, nz); if (l < 1e-12) return; nx /= l; ny /= l; nz /= l;
-            const tile = TEX.tile(tex), ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz), base = m.pos.length / 3;
+            const tile = TEX.tile(tex), tv = TEX.tileV(tex), ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz), base = m.pos.length / 3;
             [a, b, c].forEach(p => {
                 m.pos.push(p[0], p[1], p[2]); m.nrm.push(nx, ny, nz);
-                if (ax >= ay && ax >= az) m.uv.push(p[1] / tile, -p[2] / tile); else if (ay >= ax && ay >= az) m.uv.push(p[0] / tile, -p[2] / tile); else m.uv.push(p[0] / tile, p[1] / tile);
+                if (ax >= ay && ax >= az) m.uv.push(p[1] / tile, -p[2] / tv); else if (ay >= ax && ay >= az) m.uv.push(p[0] / tile, -p[2] / tv); else m.uv.push(p[0] / tile, p[1] / tv);
                 for (let q = 0; q < 3; q++) { if (p[q] < bmn[q]) bmn[q] = p[q]; if (p[q] > bmx[q]) bmx[q] = p[q]; }
             });
             m.idx.push(base, base + 1, base + 2); stats.tris += 1;

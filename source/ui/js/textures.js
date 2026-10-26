@@ -290,10 +290,19 @@ window.MLO = window.MLO || {};
         return { normal: nrm, spec: spc, size: w, bump: sf.bump, specMult: sf.spec, falloff: sf.fall };
     }
 
+    // what kind of surface a texture of the model is, from its name (for its shine and its collision type when it has no normal map of its own)
+    function guessCat(n) {
+        if (/brick/.test(n)) return 'Brick'; if (/marble|granite|terrazzo/.test(n)) return 'Marble'; if (/stone|rock|cobble|slate/.test(n)) return 'Stone';
+        if (/tile|ceramic|mosaic/.test(n)) return 'Tile'; if (/wood|plank|timber|board|parquet|oak|pine/.test(n)) return 'Wood'; if (/carpet|rug|fabric|cloth/.test(n)) return 'Carpet';
+        if (/metal|steel|iron|alu|chrome|brass|copper/.test(n)) return 'Metal'; if (/roof|shingle/.test(n)) return 'Roof'; if (/paper/.test(n)) return 'Wallpaper';
+        if (/conc|cement|asphalt|tarmac/.test(n)) return 'Concrete'; if (/plaster|paint|stucco|render|wall/.test(n)) return 'Plaster'; return 'Mine';
+    }
     const TEX = {
         SIZE, list: LIST.map(d => byId[d[0]]), cats, byId,
         def(id) { return byId[id] || byId.plaster_cream; },
-        tile(id) { return (byId[id] || byId.plaster_cream).tile; },
+        // metres one repeat of the picture covers across (u), and up (v: a picture that is not square repeats at its own proportions)
+        tile(id) { const d = byId[id] || byId.plaster_cream; if (d.kind === 'model' && TEX.modelTile) { const t = +TEX.modelTile(d.src); if (t > 0) return t; } return d.tile; },
+        tileV(id) { const d = byId[id] || byId.plaster_cream; return TEX.tile(id) * (d.aspect || 1); },
         colType(id) { return (byId[id] || byId.plaster_cream).col; },
         pixels(id) { if (!byId[id]) id = 'plaster_cream'; return cache[id] || (cache[id] = generate(id)); },
         // swatch canvas for the palette
@@ -326,11 +335,18 @@ window.MLO = window.MLO || {};
         },
         // a small picture of a material's normal or specular map, for the texture bench
         mapSwatch(id, which, px) {
+            const d = byId[id], own = d && d.kind === 'model' ? (which === 'normal' ? d.nprev : d.sprev) : null;
+            if (own) {
+                // the model's own map (a small preview of it)
+                const c = document.createElement('canvas'); c.width = c.height = px || 48; c.title = (which === 'normal' ? 'normal map' : 'specular map') + ' of the model';
+                const full = document.createElement('canvas'); full.width = own.w; full.height = own.h; full.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(own.rgba.buffer, own.rgba.byteOffset, own.rgba.byteLength), own.w, own.h), 0, 0);
+                const x = c.getContext('2d'); x.drawImage(full, 0, 0, c.width, c.height); c.style.borderRadius = '3px'; return c;
+            }
             const mp = TEX.maps(id), c = document.createElement('canvas'); c.width = c.height = px || 48; c.title = which === 'normal' ? 'normal map' : 'specular map';
             const full = document.createElement('canvas'); full.width = full.height = mp.size; full.getContext('2d').putImageData(new ImageData(which === 'normal' ? mp.normal : mp.spec, mp.size, mp.size), 0, 0);
             const x = c.getContext('2d'); x.drawImage(full, 0, 0, c.width, c.height); c.style.borderRadius = '3px'; return c;
         },
-        surface(id) { const d = byId[id] || byId.plaster_cream; return SURF_ID[d.id] || SURF[d.cat] || SURF.Mine; },
+        surface(id) { const d = byId[id] || byId.plaster_cream; if (d.kind === 'model') return d.surf; return SURF_ID[d.id] || SURF[d.cat] || SURF.Mine; },
         // Photographs that ship with the program (ui\tex\*.png): square tiles that repeat, 512 x 512 (twice the size of the generated ones), listed first under "Wood".
         // `tile` is how many metres one tile covers.
         PHOTOS: [
@@ -369,6 +385,54 @@ window.MLO = window.MLO || {};
             TEX.clearUser();
             return Promise.all((list || []).map(t => new Promise(res => { const im = new Image(); im.onload = () => { TEX.addUser(t.id, t.name, t.tile, im); res(); }; im.onerror = () => res(); im.src = t.url; })));
         },
+        // ---- the textures of the imported model (Paint tab, bench "From the model"): its own pictures, painted on your walls and floors ----
+        // info: what the host says about one (name, w, h, tris, tile in metres from the model's texture coordinates, faces [sideways, up, down], normal / spec map names
+        // and previews, the shader's bump / specAmt / fall); img: { w, h, rgba } the preview the model is drawn with. The export takes the picture itself from your files.
+        MODEL_CAT: 'From the model',
+        modelTile: null,                     // (set by the import code: the "repeats every" you typed for a texture, kept in the project)
+        modelId(name) {
+            const c = String(name || '').toLowerCase().replace(/[^a-z0-9_]/g, '_'); let id = 'mdl_' + c.slice(0, 26);
+            if (byId[id] && byId[id].src !== name) { let h = 0; for (let i = 0; i < c.length; i++) h = (h * 31 + c.charCodeAt(i)) >>> 0; id = 'mdl_' + c.slice(0, 21) + '_' + (h % 46656).toString(36).padStart(3, '0'); }
+            return id;
+        },
+        addModel(info, img) {
+            if (!info || !img || !img.rgba || !img.w || !img.h) return null;
+            const name = String(info.name).toLowerCase(), id = TEX.modelId(name), cat = guessCat(name), d = new Uint8ClampedArray(SIZE * SIZE * 4), src = img.rgba;
+            let r = 0, g = 0, b = 0;
+            // (the preview drawn square: the picture covers one repeat whatever its proportions; tileV keeps them on the walls)
+            for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
+                const sx = Math.min(img.w - 1, Math.floor((x + 0.5) * img.w / SIZE)), sy = Math.min(img.h - 1, Math.floor((y + 0.5) * img.h / SIZE)), si = (sy * img.w + sx) * 4, o = (y * SIZE + x) * 4;
+                d[o] = src[si]; d[o + 1] = src[si + 1]; d[o + 2] = src[si + 2]; d[o + 3] = 255; r += d[o]; g += d[o + 1]; b += d[o + 2];
+            }
+            const n = SIZE * SIZE, own = !!info.normal, base = SURF[cat] || SURF.Mine;
+            const surf = own ? { bump: info.bump != null ? +info.bump : 1, spec: info.specAmt != null ? +info.specAmt : base.spec, fall: info.fall != null ? +info.fall : base.fall } : base;
+            const prev = (p) => p && p.rgba ? { w: p.w, h: p.h, rgba: typeof p.rgba === 'string' ? M.fromB64(p.rgba) : p.rgba } : null;
+            const o = { id, name: info.name, cat: TEX.MODEL_CAT, tile: +info.tile > 0 ? Math.round(+info.tile * 100) / 100 : 1, est: +info.tile > 0 ? +info.tile : 0, kind: 'model', params: null, col: COL[cat] || 1, src: name,
+                aspect: info.w && info.h ? info.h / info.w : 1, w: info.w, h: info.h, uses: info.tris || 0, faces: info.faces || [0, 0, 0], normal: info.normal || '', spec: info.spec || '', surf, guess: cat, nprev: prev(info.nprev), sprev: prev(info.sprev), files: info.files || [] };
+            if (!byId[id]) TEX.list.push(o); else { const i = TEX.list.indexOf(byId[id]); if (i >= 0) TEX.list[i] = o; }
+            byId[id] = o; if (cats.indexOf(TEX.MODEL_CAT) < 0) cats.unshift(TEX.MODEL_CAT);
+            cache[id] = { id, def: o, size: SIZE, data: d, avg: [r / n / 255, g / n / 255, b / n / 255] }; delete maps[id]; delete maps[id + '|f']; if (TEX.gl[id]) delete TEX.gl[id];
+            return o;
+        },
+        clearModel() {
+            for (let i = TEX.list.length - 1; i >= 0; i--) if (TEX.list[i].kind === 'model') { const id = TEX.list[i].id; delete byId[id]; delete cache[id]; delete maps[id]; delete maps[id + '|f']; delete TEX.gl[id]; TEX.list.splice(i, 1); }
+            const k = cats.indexOf(TEX.MODEL_CAT); if (k >= 0) cats.splice(k, 1);
+        },
+        // every texture of the model that has a preview, the most used first; returns how many
+        loadModel(infos, imgs) {
+            TEX.clearModel();
+            (infos || []).slice().sort((a, b) => (b.tris || 0) - (a.tris || 0)).forEach(i => { const im = imgs && imgs[String(i.name).toLowerCase()]; if (im) TEX.addModel(i, im); });
+            return TEX.list.filter(t => t.kind === 'model').length;
+        },
+        modelList() { return TEX.list.filter(t => t.kind === 'model'); },
+        // the built-in textures closest in colour to a texture (to match the model with the program's own, which have their own normal maps)
+        nearest(id, n) {
+            const a = TEX.pixels(id).avg, out = [];
+            LIST.forEach(d => { const b = TEX.pixels(d[0]).avg; out.push([d[0], (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2]); });
+            return out.sort((p, q) => p[1] - q[1]).slice(0, n || 6).map(p => p[0]);
+        },
+        // where a texture is on the model, in words
+        whereOnModel(d) { const f = d && d.faces; if (!f || !(f[0] + f[1] + f[2])) return ''; return f[0] >= 0.6 ? 'walls' : (f[1] >= 0.6 ? 'floors and roofs' : (f[2] >= 0.6 ? 'ceilings' : 'walls and floors')); },
         // the 256 x 256 picture as a PNG for saving with the project
         userUrl(id) {
             const t = cache[id]; if (!t) return ''; const c = document.createElement('canvas'); c.width = c.height = SIZE; c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(t.data), SIZE, SIZE), 0, 0); return c.toDataURL('image/png');

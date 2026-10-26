@@ -249,10 +249,14 @@ namespace MloCreator
             lock (gate) { mlos = list; byHash = idx; archYtyp = arch; }
         }
 
+        // the game's type file (.ytyp, without the extension) that defines a model, or null when no list says (the list is built with the interior list)
+        public static string YtypOf(uint hash) { string y; return ArchYtyps().TryGetValue(hash, out y) ? y : null; }
+        public static bool ArchetypeListMissing { get { return ArchYtyps().Count == 0; } }
         static Dictionary<uint, string> ArchYtyps()
         {
             if (archYtyp != null) return archYtyp;
-            Dictionary<uint, string> d = new Dictionary<uint, string>(); string f = Path.Combine(Vanilla.CacheDir, "mlo_archetypes.txt");
+            Dictionary<uint, string> d = new Dictionary<uint, string>(); string cd = Vanilla.CacheDir ?? ImportHost.CacheDir; if (cd == null) return d;
+            string f = Path.Combine(cd, "mlo_archetypes.txt");
             if (File.Exists(f)) { string[] lines = File.ReadAllLines(f); for (int i = 1; i < lines.Length; i++) { int k = lines[i].IndexOf('|'); uint h; if (k > 0 && uint.TryParse(lines[i].Substring(0, k), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out h)) d[h] = lines[i].Substring(k + 1); } }
             archYtyp = d; return d;
         }
@@ -354,6 +358,41 @@ namespace MloCreator
             foreach (MloPlace p in m.Places) { Dictionary<string, object> pd = new Dictionary<string, object>(); pd["ymap"] = p.Ymap; pd["p"] = new double[] { p.P.X, p.P.Y, p.P.Z }; pd["q"] = new double[] { p.R.X, p.R.Y, p.R.Z, p.R.W }; pd["heading"] = Math.Round(p.R.HeadingDeg(), 3); pd["sets"] = p.Sets; places.Add(pd); }
             d["places"] = places; d["bounds"] = m.Bounds;
             return d;
+        }
+
+        // ---------------- the props of an interior (for the Place props tool): the models its entities use, how many of each ----------------
+        // The interior's own big pieces (walls, floors: models of its own type file wider than 12 m) are left out; entity sets' props are listed with the set's name.
+        public static Dictionary<string, object> Props(string key)
+        {
+            MloInfo m = Find(key); YtypFile y; MloArchetype ma = LoadMlo(m, out y);
+            Dictionary<uint, double> size = new Dictionary<uint, double>();
+            foreach (Archetype a in y.AllArchetypes) { if (a == null || a is MloArchetype) continue; SharpDX.Vector3 d = a.BBMax - a.BBMin; size[a.Hash.Hash] = Math.Sqrt(d.X * d.X + d.Y * d.Y); }
+            Dictionary<uint, int> count = new Dictionary<uint, int>(); Dictionary<uint, string> setOf = new Dictionary<uint, string>(); int shell = 0;
+            Action<uint, string> add = delegate (uint h, string set)
+            {
+                double sz; if (size.TryGetValue(h, out sz) && sz > 12) { shell++; return; }
+                int c; count.TryGetValue(h, out c); count[h] = c + 1; if (set != null && !setOf.ContainsKey(h)) setOf[h] = set;
+            };
+            if (ma.entities != null) foreach (MCEntityDef e in ma.entities) add(e.Data.archetypeName.Hash, null);
+            if (ma.entitySets != null) foreach (MCMloEntitySet s in ma.entitySets) if (s.Entities != null) foreach (MCEntityDef e in s.Entities) add(e.Data.archetypeName.Hash, NameOf(s.Data.name.Hash));
+            List<KeyValuePair<uint, int>> l = new List<KeyValuePair<uint, int>>(count); l.Sort(delegate (KeyValuePair<uint, int> a, KeyValuePair<uint, int> b) { return b.Value.CompareTo(a.Value); });
+            List<object> items = new List<object>();
+            foreach (KeyValuePair<uint, int> kv in l)
+            {
+                string n = NameOf(kv.Key); if (n.StartsWith("hash_")) continue;
+                Dictionary<string, object> d = new Dictionary<string, object>(); d["n"] = n; d["c"] = kv.Value; string sn; if (setOf.TryGetValue(kv.Key, out sn)) d["set"] = sn; items.Add(d);
+            }
+            Dictionary<string, object> r = new Dictionary<string, object>(); r["name"] = m.Name; r["hash"] = m.Hash.ToString("X8"); r["pack"] = m.Pack; r["items"] = items; r["shell"] = shell; return r;
+        }
+        // the game's interiors that stand within radius of a point (where the game places them), nearest first
+        public static List<object> Near(double x, double y, double radius, int max)
+        {
+            List<KeyValuePair<double, MloInfo>> l = new List<KeyValuePair<double, MloInfo>>();
+            foreach (MloInfo m in All) { double best = 1e18; foreach (MloPlace p in m.Places) { double d = Math.Sqrt((p.P.X - x) * (p.P.X - x) + (p.P.Y - y) * (p.P.Y - y)); if (d < best) best = d; } if (best <= radius) l.Add(new KeyValuePair<double, MloInfo>(best, m)); }
+            l.Sort(delegate (KeyValuePair<double, MloInfo> a, KeyValuePair<double, MloInfo> b) { return a.Key.CompareTo(b.Key); });
+            List<object> r = new List<object>();
+            foreach (KeyValuePair<double, MloInfo> kv in l) { if (r.Count >= max) break; Dictionary<string, object> d = new Dictionary<string, object>(); d["name"] = kv.Value.Name; d["hash"] = kv.Value.Hash.ToString("X8"); d["pack"] = kv.Value.Pack; d["dist"] = Math.Round(kv.Key, 1); d["ents"] = kv.Value.Ents; r.Add(d); }
+            return r;
         }
 
         // ---------------- export: the pieces joined into one MLO ----------------
