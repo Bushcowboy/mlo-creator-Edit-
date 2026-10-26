@@ -2,6 +2,13 @@
 
 Changes on the `feature/game-interiors` branch, newest first. Each entry says how it was tested. "Not tested in game" means it compiles and passes the checks listed, but nobody has loaded it in GTA V / FiveM yet: report what breaks and the next push fixes it.
 
+## 2026-10-26 (8) — Server and world: the area in 3D
+
+- **Look in 3D** (an MLO selected on the map, or any spot you click): the area around it, 20–300 m round, with the game's buildings (grey; read from your GTA V install, nearest first), your resources' MLOs and plain map entities in their resource colours, the game's collision as orange lines and your resources' collision in their colours. Collision of two sources crossing inside each other is what clashes.
+- Your MLOs' entities use the models in your resources' stream files, or the game's when the name is the game's; encrypted files are never opened (the entities whose models are encrypted are counted as *not found*). Interior collision (named by a resource's manifest) is moved by every placement of its MLO; other collision files are in world space.
+- Show or hide each source and each resource; left-drag turns, right-drag pans, wheel zooms, WASD and Q / E move, Esc goes back to the map. Budgets: 350 000 triangles of the game, 350 000 of your resources, 300 000 collision pieces (a note says when an area was cut).
+- Tested: an area on the test server (two overlapping shops): both models in the right place, both interior collisions moved to their placements, nothing from the encrypted resource, the game skipped with a note when GTA V is not there; the 3D page in a browser (WebGL). **Not tested** with a real GTA V install or a real server.
+
 ## 2026-10-26 (7) — Server and world: your server's MLOs, encryption, overlaps
 
 - New page **Server and world** (start screen and project list): type or pick your server's resources folder and *Scan the folder*. Every resource under it is found, also inside `[category]` folders.

@@ -258,6 +258,7 @@ No model, texture or other game file is copied: the entities keep the game's mod
 - **Encrypted files.** A resource with a `.fxap` file uses asset escrow. A stream file whose first bytes are not a GTA file (`RSC7`, `PSIN`, `RBF0`) is encrypted: it is listed with a lock and not loaded. No tool can read or change those files.
 - **What is read**: the MLOs the type files define, where the map files place them, which collision files belong to which interior (the manifests), and the extents of plain map files.
 - **To look at**: MLOs whose boxes overlap (by at least 0.5 m every way) each other or the game's own interiors (press *Add the game's interiors* to include those), archetype names defined by two resources, and file names streamed by two resources (only one of the copies loads in the game).
+- **Look in 3D** shows the area round a selected MLO or a clicked spot (20–300 m): the game's buildings in grey, your resources' MLOs and map entities in their colours, and the collision of both as lines (the game's orange). Their models come from your resources' stream files, or from the game for the game's own model names; encrypted files are not opened. Interior collision is moved by every placement of its MLO. Lines of two colours running through each other are collision that clashes.
 - **The map** shows every placed MLO as its box, coloured by resource, plain map files as outlines, the game's interiors as grey dots and overlaps as red rings. Click a conflict to fly to it, an MLO for its details.
 
 ## Controls
@@ -289,4 +290,5 @@ No model, texture or other game file is copied: the entities keep the game's mod
 | `ui\js\walk.js` | The walk check |
 | `ui\interiors.html`, `ui\js\interiors.js` | The game's own interiors: list, plan, export |
 | `ui\js\look.js` | Paint tab: materials, wall colours, trim, lights, timecycle |
-| `ui\world.html`, `ui\js\world.js` | Server and world: your resources on the map |
+| `ui\world.html`, `ui\js\world.js`, `ui\js\world3d.js` | Server and world: your resources on the map, the area in 3D |
+| `src\Area.cs` | An area in 3D: the game's buildings, your MLOs, and the collision of both |

@@ -189,8 +189,8 @@ window.MLO = window.MLO || {};
         if (!(S.data && S.data.gameInteriors && S.data.gameInteriors.length)) H.append(el('button', { class: 'btn sm', title: 'Add the game\'s own interiors to the map and to the overlap check', onclick: loadInteriors }, S.interiors && S.interiors.busy ? 'Reading the game\'s interiors...' : 'Add the game\'s interiors'));
         H.append(el('span', { class: 'legend', style: { marginLeft: '6px' } }, el('span', null, el('i', { style: { background: '#ff5c5c' } }), 'overlap'), el('span', null, el('i', { style: { background: 'rgba(170,180,200,.6)' } }), 'game interior')));
     }
-    function renderAll() { renderLeft(); renderRight(); renderHud(); draw(); }
-    W.renderAll = renderAll;
+    function renderAllNow() { renderLeft(); renderRight(); renderHud(); draw(); }
+    W.renderAll = renderAllNow; const renderAll = () => W.renderAll();
 
     async function start() {
         $('b-back').onclick = () => { try { sessionStorage.setItem('mlo.noauto', '1'); } catch (e) { } location.href = 'index.html'; };

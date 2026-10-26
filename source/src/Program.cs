@@ -550,6 +550,20 @@ namespace MloCreator
                 Reply(c, 200, "{\"ok\":true}", "application/json"); return;
             }
             if (api.StartsWith("interiors/")) { HandleInteriors(c, api.Substring(10), method); return; }
+            if (api.StartsWith("area/"))
+            {
+                // an area in 3D: the game's buildings, your server's MLOs and the collision of both (a background job)
+                try
+                {
+                    string aa = api.Substring(5);
+                    if (aa == "load" && method == "POST") { Area.Start(Json.DeserializeObject(ReadBody(c)) as Dictionary<string, object>, GtaDefault(), Path.Combine(Root, "cache")); Reply(c, 200, "{\"ok\":true}", "application/json"); return; }
+                    if (aa == "status") { Dictionary<string, object> st = Area.StatusInfo(); if (string.IsNullOrEmpty((string)st["status"]) && Area.Busy) st["status"] = Vanilla.Status; Reply(c, 200, Json.Serialize(st), "application/json"); return; }
+                    if (aa == "result") { Reply(c, 200, Json.Serialize(Area.Result()), "application/json"); return; }
+                    Reply(c, 404, "{\"ok\":false,\"error\":\"unknown api\"}", "application/json");
+                }
+                catch (Exception ex) { Reply(c, 200, Json.Serialize(new Dictionary<string, object> { { "ok", false }, { "error", ex.Message } }), "application/json"); }
+                return;
+            }
             if (api.StartsWith("server/"))
             {
                 // your server's resources: scan a folder (in the background), read the result
