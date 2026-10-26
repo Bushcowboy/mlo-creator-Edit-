@@ -550,6 +550,26 @@ namespace MloCreator
                 Reply(c, 200, "{\"ok\":true}", "application/json"); return;
             }
             if (api.StartsWith("interiors/")) { HandleInteriors(c, api.Substring(10), method); return; }
+            if (api.StartsWith("server/"))
+            {
+                // your server's resources: scan a folder (in the background), read the result
+                try
+                {
+                    string sa = api.Substring(7);
+                    if (sa == "pick") { string[] pk = ImportHost.Pick(true); Reply(c, 200, Json.Serialize(new Dictionary<string, object> { { "ok", pk != null && pk.Length > 0 }, { "path", pk != null && pk.Length > 0 ? pk[0] : "" } }), "application/json"); return; }
+                    if (sa == "scan" && method == "POST")
+                    {
+                        Dictionary<string, object> body = Json.DeserializeObject(ReadBody(c)) as Dictionary<string, object>; string path = J.S(J.G(body, "path"), "").Trim().Trim('"');
+                        Server.StartScan(path); Dictionary<string, object> st = Settings(); st["serverPath"] = path; File.WriteAllText(SettingsPath, Json.Serialize(st), Encoding.UTF8);
+                        Reply(c, 200, "{\"ok\":true}", "application/json"); return;
+                    }
+                    if (sa == "status") { Dictionary<string, object> st = Server.StatusInfo(); st["last"] = J.S(J.G(Settings(), "serverPath"), ""); Reply(c, 200, Json.Serialize(st), "application/json"); return; }
+                    if (sa == "result") { Reply(c, 200, Json.Serialize(Server.Result()), "application/json"); return; }
+                    Reply(c, 404, "{\"ok\":false,\"error\":\"unknown api\"}", "application/json");
+                }
+                catch (Exception ex) { Reply(c, 200, Json.Serialize(new Dictionary<string, object> { { "ok", false }, { "error", ex.Message } }), "application/json"); }
+                return;
+            }
             if (api == "timecycles/list" || api == "timecycles/get")
             {
                 // the game's timecycle modifiers (reads the game archives the first time, about 10 seconds)

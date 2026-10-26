@@ -16,6 +16,7 @@ You import the model files of a building (for example a vanilla house), cut door
 - **Props and plants**: find the map's bushes, trees and props across the whole model, see them in the view, and remove the ones you pick (written as a small client script).
 - **Finish the inside**: floor and wall paint with built-in and your own textures, ceiling lights, scale figure.
 - **Check it**: checklist, collision walk-through, then **export** a resource with `fxmanifest.lua`, `client/ipl.lua` and a README that lists every game file it replaces and a test spot to teleport to.
+- **Check your server**: scan your server's resources folder to see every MLO on the map, which files are encrypted (asset escrow, left out), and which MLOs overlap each other or the game's interiors, plus duplicate archetypes and files.
 - **Use the game's own interiors**: copy a Rockstar interior (the Diamond Casino, an apartment, an office...) to any place as an MLO you can walk into, or join several, such as all the pieces of the casino, into one big MLO. Doorways that meet snap together and become one portal; the game's collision comes along, moved with each piece. Nothing but the layout and the collision is written: the game supplies its own models.
 
 A second, simpler project type builds a whole new house on a grid. Details of every tool are in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).

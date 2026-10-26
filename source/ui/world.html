@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="mlo-token" content="__TOKEN__">
+<title>Server and World</title>
+<link rel="icon" type="image/png" href="logo.png">
+<link rel="stylesheet" href="app.css">
+<style>
+  #wa { position: fixed; inset: 0; display: grid; grid-template-columns: 310px 1fr 340px; grid-template-rows: 46px 1fr 26px; }
+  #wa > header { grid-column: 1 / 4; position: static; }
+  #wa .side { position: static; overflow: auto; padding: 10px 12px; border-radius: 0; border-width: 0 1px 0 0; }
+  #wa .side.r { border-width: 0 0 0 1px; }
+  #mapwrap { position: relative; overflow: hidden; background: var(--bg); }
+  #map, #view3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #map { cursor: grab; } #map.dragging { cursor: grabbing; }
+  #view3d { display: none; }
+  #maphud { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  #maphud .btn { background: var(--panel); }
+  #tip { position: absolute; pointer-events: none; background: rgba(10, 16, 30, .94); border: 1px solid var(--line2); border-radius: 5px; padding: 5px 8px; font-size: 12px; display: none; max-width: 340px; }
+  #wa > footer { grid-column: 1 / 4; display: flex; align-items: center; gap: 16px; padding: 0 12px; font-size: 12px; color: var(--muted); background: var(--panel); border-top: 1px solid var(--line); }
+  .txt { background: rgba(0, 0, 0, .25); border: 1px solid var(--line2); color: var(--text); border-radius: 4px; padding: 5px 7px; font: inherit; min-width: 0; }
+  .txt:focus { outline: none; border-color: var(--accent); }
+  .res { border: 1px solid var(--line); border-left: 4px solid var(--c, var(--line2)); border-radius: var(--r); padding: 6px 9px; margin: 5px 0; background: var(--panel2); cursor: pointer; }
+  .res.on { border-color: var(--accent); background: rgba(79, 140, 255, .14); border-left-color: var(--c, var(--accent)); }
+  .res .t { font-weight: 600; overflow-wrap: anywhere; }
+  .res .m { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .badge { display: inline-block; font-size: 10.5px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line2); margin-right: 4px; color: var(--muted); }
+  .badge.lock { color: #f3c37a; border-color: rgba(224, 164, 58, .6); }
+  .badge.bad { color: #f0a4a3; border-color: rgba(214, 80, 79, .6); }
+  .badge.good { color: #8fdcae; border-color: rgba(47, 174, 98, .6); }
+  .cf { border: 1px solid var(--line); border-radius: var(--r); padding: 6px 8px; margin: 5px 0; background: var(--panel2); font-size: 12px; cursor: pointer; }
+  .cf:hover { border-color: var(--line2); }
+  .cf b { color: var(--text); }
+  .cf.overlap { border-left: 3px solid var(--red); } .cf.file { border-left: 3px solid var(--amber); } .cf.archetype { border-left: 3px solid #c46bd6; }
+  .flist { font: 11.5px/1.5 Consolas, monospace; max-height: 260px; overflow: auto; background: rgba(0, 0, 0, .25); border: 1px solid var(--line); border-radius: 4px; padding: 5px 7px; user-select: text; }
+  .flist .enc { color: #f3c37a; } .flist .bad { color: #f0a4a3; } .flist .ok { color: var(--muted); }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin: 6px 0; }
+  .bar > div { height: 100%; width: 40%; background: var(--accent); animation: slide 1.2s infinite linear; }
+  @keyframes slide { from { margin-left: -40%; } to { margin-left: 100%; } }
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; vertical-align: -1px; margin-right: 4px; border-radius: 2px; }
+  .chk { display: flex; gap: 7px; align-items: flex-start; margin: 6px 0; font-size: 12px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="wa">
+  <header id="top">
+    <div class="brand"><img src="logo.png" alt="" width="24" height="24">MLO<span>Creator</span></div>
+    <div style="font-weight:600">Server and world</div>
+    <div style="margin:0 auto;color:var(--muted);font-size:12px" id="toptext">Your server's MLOs on the map, what is encrypted, and what overlaps</div>
+    <div class="actions"><button class="btn" id="b-back">Projects</button></div>
+  </header>
+  <aside class="panel side" id="wleft"></aside>
+  <section id="mapwrap"><canvas id="map" tabindex="0"></canvas><canvas id="view3d" tabindex="0"></canvas><div id="maphud"></div><div id="tip"></div></section>
+  <aside class="panel side r" id="wright"></aside>
+  <footer><span id="hint">Wheel zooms, drag to pan, click an MLO to select it. Nothing is written to your server folder.</span><span id="stats" style="margin-left:auto"></span></footer>
+</div>
+<div id="toasts"></div>
+<div id="modal" hidden></div>
+<script src="js/util.js"></script>
+<script src="js/world.js"></script>
+</body>
+</html>

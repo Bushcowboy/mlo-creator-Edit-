@@ -2,6 +2,16 @@
 
 Changes on the `feature/game-interiors` branch, newest first. Each entry says how it was tested. "Not tested in game" means it compiles and passes the checks listed, but nobody has loaded it in GTA V / FiveM yet: report what breaks and the next push fixes it.
 
+## 2026-10-26 (7) — Server and world: your server's MLOs, encryption, overlaps
+
+- New page **Server and world** (start screen and project list): type or pick your server's resources folder and *Scan the folder*. Every resource under it is found, also inside `[category]` folders.
+- **Encrypted files**: a resource with a `.fxap` file is marked *escrow*, and every stream file whose bytes are not a GTA file (not `RSC7`, `PSIN`, `RBF0`) is listed as encrypted and left out. Everything else is read. Nothing is written to the server folder.
+- From the readable files: the MLOs each resource defines (`.ytyp`), where its maps place them (`.ymap`), their interior collision (`.ymf` manifests), and the extents of its plain map files.
+- **To look at**: MLOs whose boxes overlap (at least 0.5 m in every direction) with each other, and with the game's own interiors once *Add the game's interiors* has read their list; archetype names defined by two resources; file names streamed by two resources (only one copy loads). Click one to fly to it on the map.
+- The map: every placed MLO as its box (coloured by resource), the plain map files as outlines, the game's interiors as grey dots, overlaps as red rings. Click an MLO for its position, rooms, entities and collision files.
+- Tested: a scan of a test server folder (two real exported MLOs placed 3 m apart, an escrow resource with random-byte stream files, a resource streaming a copy of another's collision and type file) finds 4 resources, the escrow badge and 3 encrypted files, the overlap, the duplicate file and both duplicate archetypes; the page against the real scan in a browser. **Not tested** on a real server folder or real escrowed resources.
+- Next: the area around a spot in 3D (the game's buildings, your MLOs and their collision together), then opening an MLO's files in a project to fix its collision.
+
 ## 2026-10-26 (6) — Timecycle editor
 
 - Paint tab, *Timecycle*: *Usual* (what MLO Creator always used), *The game's* (any of the game's timecycle modifiers by name; *Read the game's list* reads every `timecycle_mods` file of your install, plain or binary XML), or *My own*.

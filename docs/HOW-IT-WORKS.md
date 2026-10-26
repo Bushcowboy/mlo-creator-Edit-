@@ -16,8 +16,9 @@ This is the reference for what each part of the program does and how it is built
 10. [Limits](#limits)
 11. [Whole new building](#whole-new-building)
 12. [The game's own interiors](#the-games-own-interiors)
-13. [Controls](#controls)
-14. [Code map](#code-map)
+13. [Server and world](#server-and-world)
+14. [Controls](#controls)
+15. [Code map](#code-map)
 
 ## Architecture
 
@@ -249,6 +250,16 @@ No model, texture or other game file is copied: the entities keep the game's mod
 - Pieces that the game does not place itself (no map file) stay where you put them in *Arrange as in the game*.
 - Scripted parts of the game's interiors (the casino's games, lifts, doors that open by script) are not part of the interior and do not come with it.
 
+## Server and world
+
+**Server and world** (on the start screen and in the project list) reads your server's resources folder; nothing in it is changed.
+
+- *Scan the folder* finds every resource (a folder with `fxmanifest.lua` or `__resource.lua`, also inside `[category]` folders) and looks at every `.ytyp`, `.ymap`, `.ybn`, `.ydr`, `.ydd`, `.yft`, `.ytd` and `.ymf` file in it.
+- **Encrypted files.** A resource with a `.fxap` file uses asset escrow. A stream file whose first bytes are not a GTA file (`RSC7`, `PSIN`, `RBF0`) is encrypted: it is listed with a lock and not loaded. No tool can read or change those files.
+- **What is read**: the MLOs the type files define, where the map files place them, which collision files belong to which interior (the manifests), and the extents of plain map files.
+- **To look at**: MLOs whose boxes overlap (by at least 0.5 m every way) each other or the game's own interiors (press *Add the game's interiors* to include those), archetype names defined by two resources, and file names streamed by two resources (only one of the copies loads in the game).
+- **The map** shows every placed MLO as its box, coloured by resource, plain map files as outlines, the game's interiors as grey dots and overlaps as red rings. Click a conflict to fly to it, an MLO for its details.
+
 ## Controls
 
 **Camera:** middle-drag orbits (Shift pans, Ctrl zooms), right-drag also orbits, wheel zooms, keypad 1 / 3 / 7 for front / right / top (Ctrl for the opposite side), Home frames everything, WASD moves, Q / E turn 90 degrees, T is top-down.
@@ -268,6 +279,8 @@ No model, texture or other game file is copied: the entities keep the game's mod
 | `src\Vanilla.cs` | Reading the game's archives and map files |
 | `src\Exporter.cs`, `src\FitExport.cs` | Writing the resource, door and window props |
 | `src\Interiors.cs` | The game's own interiors: the list, one interior's rooms and portals, joining pieces into one MLO |
+| `src\Timecycles.cs` | The game's timecycle modifiers, and writing your own |
+| `src\Server.cs` | Your server's resources: encrypted files, MLOs, placements, overlaps and clashes |
 | `src\GlbModels.cs` | Reading `.glb` models |
 | `ui\js\importmodel.js`, `importtools.js`, `importui.js` | The import workflow: model, tools, side panels |
 | `ui\js\plants.js` | Props and plants |
@@ -275,3 +288,5 @@ No model, texture or other game file is copied: the entities keep the game's mod
 | `ui\js\fitmodels.js` | Placing `.glb` models |
 | `ui\js\walk.js` | The walk check |
 | `ui\interiors.html`, `ui\js\interiors.js` | The game's own interiors: list, plan, export |
+| `ui\js\look.js` | Paint tab: materials, wall colours, trim, lights, timecycle |
+| `ui\world.html`, `ui\js\world.js` | Server and world: your resources on the map |

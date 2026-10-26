@@ -73,6 +73,7 @@ namespace MloCreator
         const string Version = "mlo-index-2";
 
         public static bool Ready { get { return mlos != null; } }
+        public static List<MloInfo> All { get { List<MloInfo> l = mlos; return l ?? new List<MloInfo>(); } }
         public static bool Busy { get { return worker != null && worker.IsAlive; } }
 
         static string F(double v) { return v.ToString("0.######", CultureInfo.InvariantCulture); }
