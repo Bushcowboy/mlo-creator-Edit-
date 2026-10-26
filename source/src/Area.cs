@@ -4,7 +4,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
+using System.Text;
 using System.Threading;
+using System.Xml;
 using CodeWalker.GameFiles;
 using SharpDX;
 
@@ -123,6 +126,40 @@ namespace MloCreator
                 }
             }
         }
+
+        // the same as Walk for one of your resources' files, remembering where every piece comes from: file, top child of the composite (-1: the file is one
+        // shape), polygon in it (-1: the whole child is one shape), so a piece picked in the view can be taken out of that file
+        static void WalkRef(Bounds b, Xf place, Matrix parent, V3 c, double[] win, List<float> tris, List<float> boxes, List<int> trefs, List<int> brefs, int file, int child, ref int count)
+        {
+            if (b == null || count > ColMax) return;
+            Matrix m = parent; if (b.Parent != null) { try { m = b.Transform * parent; } catch (Exception) { } }
+            BoundComposite comp = b as BoundComposite;
+            if (comp != null) { if (comp.Children != null) { for (int i = 0; i < comp.Children.data_items.Length; i++) WalkRef(comp.Children.data_items[i], place, m, c, win, tris, boxes, trefs, brefs, file, child < 0 && b.Parent == null ? i : child, ref count); } return; }
+            int t0 = tris.Count, b0 = boxes.Count;
+            BoundGeometry geo = b as BoundGeometry;
+            if (geo == null || geo.Polygons == null) { Walk(b, place, parent, c, win, tris, boxes, ref count); for (int k = b0; k < boxes.Count; k += 6) { brefs.Add(file); brefs.Add(child); brefs.Add(-1); } return; }
+            Func<Vector3, V3> W = delegate (Vector3 v) { Vector3 q = Vector3.TransformCoordinate(v, m); return place.Apply(new V3(q.X, q.Y, q.Z)); };
+            for (int pi = 0; pi < geo.Polygons.Length; pi++)
+            {
+                BoundPolygon p = geo.Polygons[pi]; Vector3[] vp = p.VertexPositions; if (vp == null) continue;
+                if (p is BoundPolygonTriangle && vp.Length >= 3)
+                {
+                    V3 a = W(vp[0]), bb = W(vp[1]), cc = W(vp[2]);
+                    if (Math.Max(a.X, Math.Max(bb.X, cc.X)) < win[0] || Math.Min(a.X, Math.Min(bb.X, cc.X)) > win[1] || Math.Max(a.Y, Math.Max(bb.Y, cc.Y)) < win[2] || Math.Min(a.Y, Math.Min(bb.Y, cc.Y)) > win[3]) continue;
+                    foreach (V3 v in new V3[] { a, bb, cc }) { tris.Add((float)(v.X - c.X)); tris.Add((float)(v.Y - c.Y)); tris.Add((float)(v.Z - c.Z)); }
+                    trefs.Add(file); trefs.Add(child); trefs.Add(pi); if (++count > ColMax) return;
+                }
+                else if (vp.Length >= 2 && (p is BoundPolygonBox || vp.Length >= 4))
+                {
+                    V3 mn = new V3(1e9, 1e9, 1e9), mx = new V3(-1e9, -1e9, -1e9);
+                    foreach (Vector3 v0 in vp) { V3 w = W(v0); mn = new V3(Math.Min(mn.X, w.X), Math.Min(mn.Y, w.Y), Math.Min(mn.Z, w.Z)); mx = new V3(Math.Max(mx.X, w.X), Math.Max(mx.Y, w.Y), Math.Max(mx.Z, w.Z)); }
+                    if (mx.X < win[0] || mn.X > win[1] || mx.Y < win[2] || mn.Y > win[3]) continue;
+                    boxes.Add((float)(mn.X - c.X)); boxes.Add((float)(mn.Y - c.Y)); boxes.Add((float)(mn.Z - c.Z)); boxes.Add((float)(mx.X - c.X)); boxes.Add((float)(mx.Y - c.Y)); boxes.Add((float)(mx.Z - c.Z));
+                    brefs.Add(file); brefs.Add(child); brefs.Add(pi); if (++count > ColMax) return;
+                }
+            }
+        }
+        static string B64i(List<int> l) { int[] a = l.ToArray(); byte[] b = new byte[a.Length * 4]; Buffer.BlockCopy(a, 0, b, 0, b.Length); return Convert.ToBase64String(b); }
 
         // an entity's model placed in the world: entity turn is stored inverted (inside an MLO and in a map file alike), the MLO instance's is not
         static int Place(float[] t, Xf x, double sxy, double sz, V3 c, double[] win, List<float> into, int budget)
@@ -250,10 +287,11 @@ namespace MloCreator
                 }
                 if (wantServer && rs != null) foreach (SrvRes sr in rs)
                     {
-                        List<float> ct = new List<float>(), cb = new List<float>(); List<string> used = new List<string>();
+                        List<float> ct = new List<float>(), cb = new List<float>(); List<string> used = new List<string>(); List<int> trefs = new List<int>(), brefs = new List<int>(); List<object> flist = new List<object>();
                         foreach (SrvFile f in sr.Files)
                         {
                             if (f.Ext != ".ybn" || f.State != "ok" || count > ColMax) continue;
+                            int fi = flist.Count;
                             YbnFile yb = new YbnFile(); try { yb.Load(File.ReadAllBytes(Path.Combine(sr.Dir, f.Rel))); } catch (Exception) { continue; }
                             if (yb.Bounds == null) continue;
                             // an interior's collision: moved by every placement of that MLO; else the file is in world space
@@ -261,11 +299,12 @@ namespace MloCreator
                             foreach (SrvMlo m in sr.Mlos) if (m.Bounds.Contains(f.Name)) { interior = true; foreach (SrvRes r2 in rs) foreach (SrvPlace p in r2.Places) if (p.Hash == m.Hash) places.Add(new Xf(p.R, p.P)); }
                             if (!interior) places.Add(Xf.Identity);
                             int before = ct.Count + cb.Count;
-                            foreach (Xf pl in places) Walk(yb.Bounds, pl, Matrix.Identity, c, win, ct, cb, ref count);
+                            foreach (Xf pl in places) WalkRef(yb.Bounds, pl, Matrix.Identity, c, win, ct, cb, trefs, brefs, fi, -1, ref count);
+                            Dictionary<string, object> fo = new Dictionary<string, object>(); fo["name"] = f.Name; fo["rel"] = f.Rel; fo["interior"] = interior; flist.Add(fo);
                             if (ct.Count + cb.Count > before) used.Add(f.Name + (interior ? " (interior, " + places.Count + " placement" + (places.Count == 1 ? "" : "s") + ")" : ""));
                         }
                         if (used.Count == 0) continue;
-                        Dictionary<string, object> o = new Dictionary<string, object>(); o["source"] = sr.Name; o["tris"] = B64(ct); o["boxes"] = B64(cb); o["files"] = used; cols.Add(o);
+                        Dictionary<string, object> o = new Dictionary<string, object>(); o["source"] = sr.Name; o["tris"] = B64(ct); o["boxes"] = B64(cb); o["files"] = used; o["fileList"] = flist; o["trefs"] = B64i(trefs); o["brefs"] = B64i(brefs); cols.Add(o);
                         log.Add(sr.Name + " collision: " + string.Join(", ", used.ToArray()));
                     }
                 if (count > ColMax) warns.Add("The collision was cut at " + ColMax + " pieces: make the area smaller.");
@@ -273,6 +312,112 @@ namespace MloCreator
             }
             res["ok"] = true; res["log"] = log; res["warnings"] = warns;
             return res;
+        }
+
+        // ---------- fixing a resource's collision file: pieces taken out, boxes added; the fixed copy goes to the output folder (the server folder is not touched) ----------
+        public static Dictionary<string, object> Fix(Dictionary<string, object> spec, string outRoot)
+        {
+            List<SrvRes> rs = Server.Resources; if (rs == null) throw new Exception("Scan your server first.");
+            string resName = J.S(J.G(spec, "resource"), ""), rel = J.S(J.G(spec, "file"), "");
+            SrvRes sr = rs.Find(delegate (SrvRes q) { return q.Name == resName; }); if (sr == null) throw new Exception("No resource called " + resName + ".");
+            SrvFile sf = sr.Files.Find(delegate (SrvFile q) { return q.Rel == rel; }); if (sf == null || sf.Ext != ".ybn") throw new Exception("No collision file " + rel + " in " + resName + ".");
+            if (sf.State != "ok") throw new Exception(rel + " is encrypted or unreadable: it cannot be changed.");
+            YbnFile yb = new YbnFile(); yb.Load(File.ReadAllBytes(Path.Combine(sr.Dir, sf.Rel)));
+            XmlDocument doc = new XmlDocument(); doc.LoadXml(YbnXml.GetXml(yb));
+            XmlElement root = doc.SelectSingleNode("/BoundsFile/Bounds") as XmlElement; if (root == null) throw new Exception("Could not read " + rel + ".");
+            bool composite = root.GetAttribute("type") == "Composite";
+            List<XmlElement> kids = new List<XmlElement>(); if (composite) foreach (XmlNode n in root.SelectNodes("Children/Item")) kids.Add((XmlElement)n);
+            // pieces out: by top child and polygon (polygon -1: the whole child)
+            int removed = 0; HashSet<string> gone = new HashSet<string>();
+            foreach (object o in J.A(J.G(spec, "deletes"))) { List<object> d = J.A(o); if (d.Count >= 2) gone.Add(J.I(d[0], -1) + "|" + J.I(d[1], -1)); }
+            Dictionary<XmlElement, List<XmlNode>> drop = new Dictionary<XmlElement, List<XmlNode>>(); List<XmlElement> dropKids = new List<XmlElement>();
+            foreach (string g in gone)
+            {
+                string[] p = g.Split('|'); int ch = int.Parse(p[0]), pi = int.Parse(p[1]);
+                XmlElement geo = composite ? (ch >= 0 && ch < kids.Count ? kids[ch] : null) : root; if (geo == null) continue;
+                if (pi < 0) { if (composite && !dropKids.Contains(geo)) { dropKids.Add(geo); removed++; } continue; }
+                XmlElement polys = geo.SelectSingleNode("Polygons") as XmlElement; if (polys == null) continue;
+                List<XmlNode> items = new List<XmlNode>(); foreach (XmlNode n in polys.ChildNodes) if (n is XmlElement) items.Add(n);
+                if (pi >= items.Count) continue; List<XmlNode> l; if (!drop.TryGetValue(geo, out l)) drop[geo] = l = new List<XmlNode>(); if (!l.Contains(items[pi])) { l.Add(items[pi]); removed++; }
+            }
+            foreach (KeyValuePair<XmlElement, List<XmlNode>> kv in drop)
+            {
+                XmlElement polys = kv.Key.SelectSingleNode("Polygons") as XmlElement; foreach (XmlNode n in kv.Value) polys.RemoveChild(n);
+                bool empty = true; foreach (XmlNode n in polys.ChildNodes) if (n is XmlElement) { empty = false; break; }
+                if (empty && composite && !dropKids.Contains(kv.Key)) dropKids.Add(kv.Key);
+            }
+            foreach (XmlElement k in dropKids) k.ParentNode.RemoveChild(k);
+            // boxes in: given in the world; an interior's collision gets them in its own space (by the placement nearest to the box)
+            List<object> adds = J.A(J.G(spec, "add")); int added = 0;
+            if (adds.Count > 0)
+            {
+                if (!composite)
+                {
+                    // the file is one shape: it becomes a composite with that shape as its first child
+                    XmlElement nroot = doc.CreateElement("Bounds"); nroot.SetAttribute("type", "Composite");
+                    foreach (string tag in new string[] { "BoxMin", "BoxMax", "BoxCenter", "SphereCenter", "SphereRadius", "Margin", "Volume", "Inertia", "MaterialIndex", "MaterialColourIndex", "ProceduralID", "RoomID", "PedDensity", "UnkFlags", "PolyFlags", "UnkType" }) { XmlNode n = root.SelectSingleNode(tag); if (n != null) nroot.AppendChild(n.CloneNode(true)); }
+                    XmlElement ch0 = doc.CreateElement("Children"), it = doc.CreateElement("Item"); it.SetAttribute("type", root.GetAttribute("type"));
+                    foreach (XmlNode n in root.ChildNodes) it.AppendChild(n.CloneNode(true));
+                    it.AppendChild(Tagged(doc, "CompositeTransform", "1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1")); it.AppendChild(Tagged(doc, "CompositeFlags1", Flags1)); it.AppendChild(Tagged(doc, "CompositeFlags2", Flags2));
+                    ch0.AppendChild(it); nroot.AppendChild(ch0); root.ParentNode.ReplaceChild(nroot, root); root = nroot; composite = true;
+                }
+                List<Xf> places = new List<Xf>(); bool interior = false;
+                foreach (SrvMlo m in sr.Mlos) if (m.Bounds.Contains(sf.Name)) { interior = true; foreach (SrvRes r2 in rs) foreach (SrvPlace p in r2.Places) if (p.Hash == m.Hash) places.Add(new Xf(p.R, p.P)); }
+                XmlElement children = root.SelectSingleNode("Children") as XmlElement; if (children == null) { children = doc.CreateElement("Children"); root.AppendChild(children); }
+                V3 bmn = Vec(root, "BoxMin"), bmx = Vec(root, "BoxMax");
+                foreach (object ao in adds)
+                {
+                    Dictionary<string, object> ad = J.O(ao); List<object> a0 = J.A(J.G(ad, "min")), a1 = J.A(J.G(ad, "max")); if (a0.Count < 3 || a1.Count < 3) continue;
+                    V3 w0 = new V3(J.D(a0[0], 0), J.D(a0[1], 0), J.D(a0[2], 0)), w1 = new V3(J.D(a1[0], 0), J.D(a1[1], 0), J.D(a1[2], 0)), wc = (w0 + w1) * 0.5;
+                    Xf toFile = Xf.Identity;
+                    if (interior && places.Count > 0) { Xf best = places[0]; foreach (Xf pl in places) if ((pl.T - wc).Len() < (best.T - wc).Len()) best = pl; toFile = best.Inverse(); }
+                    List<V3> cs = new List<V3>(); for (int i = 0; i < 8; i++) cs.Add(toFile.Apply(new V3((i & 1) == 0 ? w0.X : w1.X, (i & 2) == 0 ? w0.Y : w1.Y, (i & 4) == 0 ? w0.Z : w1.Z)));
+                    foreach (V3 v in cs) { bmn = new V3(Math.Min(bmn.X, v.X), Math.Min(bmn.Y, v.Y), Math.Min(bmn.Z, v.Z)); bmx = new V3(Math.Max(bmx.X, v.X), Math.Max(bmx.Y, v.Y), Math.Max(bmx.Z, v.Z)); }
+                    int room = J.I(J.G(ad, "room"), interior ? 1 : 0), type = J.I(J.G(ad, "material"), 1);
+                    children.AppendChild(BoxChild(doc, cs, type, room)); added++;
+                }
+                SetVec(root, "BoxMin", bmn); SetVec(root, "BoxMax", bmx); SetVec(root, "BoxCenter", (bmn + bmx) * 0.5); SetVec(root, "SphereCenter", (bmn + bmx) * 0.5);
+                XmlElement sr2 = root.SelectSingleNode("SphereRadius") as XmlElement; if (sr2 != null) sr2.SetAttribute("value", Fs((bmx - bmn).Len() * 0.5));
+            }
+            if (removed == 0 && added == 0) throw new Exception("Nothing to change in " + rel + ".");
+            YbnFile fixd = XmlYbn.GetYbn(doc); byte[] bytes = fixd.Save();
+            string dir = Path.Combine(outRoot, sr.Name + "_collision_fix"), target = Path.Combine(dir, sf.Rel.Replace('\\', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)); File.WriteAllBytes(target, bytes);
+            string readme = Path.Combine(dir, "README.md"), line = "- `" + sf.Rel + "`: " + removed + " piece(s) taken out, " + added + " box(es) added (" + DateTime.Now.ToString("yyyy-MM-dd HH:mm") + ")\n";
+            if (!File.Exists(readme)) File.WriteAllText(readme, "# Collision fixes for " + sr.Name + "\n\nMade by MLO Creator (Server and world). Copy each file over the one with the same path in the resource `" + sr.Name + "` (keep a copy of the original), then restart the resource.\n\n");
+            File.AppendAllText(readme, line);
+            Dictionary<string, object> ok = new Dictionary<string, object>(); ok["ok"] = true; ok["dir"] = dir; ok["file"] = target; ok["removed"] = removed; ok["added"] = added; ok["bytes"] = bytes.Length; return ok;
+        }
+        const string Flags1 = "MAP_WEAPON, MAP_DYNAMIC, MAP_ANIMAL, MAP_COVER, MAP_VEHICLE";
+        const string Flags2 = "UNKNOWN, MAP_WEAPON, MAP_DYNAMIC, MAP_ANIMAL, MAP_COVER, MAP_VEHICLE, VEHICLE_NOT_BVH, VEHICLE_BVH, PED, RAGDOLL, ANIMAL, ANIMAL_RAGDOLL, OBJECT, OBJECT_ENV_CLOTH, PLANT, PROJECTILE, EXPLOSION, PICKUP, FOLIAGE, FORKLIFT_FORKS, TEST_WEAPON, TEST_CAMERA, TEST_AI, TEST_SCRIPT, TEST_VEHICLE_WHEEL, GLASS, MAP_RIVER, SMOKE, UNSMASHED, MAP_STAIRS, MAP_DEEP_SURFACE";
+        static string Fs(double v) { return v.ToString("0.####", CultureInfo.InvariantCulture); }
+        static XmlElement Tagged(XmlDocument d, string tag, string text) { XmlElement e = d.CreateElement(tag); e.InnerText = text; return e; }
+        static V3 Vec(XmlElement p, string tag)
+        {
+            XmlElement e = p.SelectSingleNode(tag) as XmlElement; if (e == null) return new V3(1e9, 1e9, 1e9);
+            Func<string, double> D = delegate (string a) { double v; double.TryParse(e.GetAttribute(a), NumberStyles.Float, CultureInfo.InvariantCulture, out v); return v; };
+            return new V3(D("x"), D("y"), D("z"));
+        }
+        static void SetVec(XmlElement p, string tag, V3 v) { XmlElement e = p.SelectSingleNode(tag) as XmlElement; if (e == null) return; e.SetAttribute("x", Fs(v.X)); e.SetAttribute("y", Fs(v.Y)); e.SetAttribute("z", Fs(v.Z)); }
+        static string VecXml(string tag, V3 v) { return "<" + tag + " x=\"" + Fs(v.X) + "\" y=\"" + Fs(v.Y) + "\" z=\"" + Fs(v.Z) + "\" />"; }
+        // a box as a child of its own: 8 corners (in the file's space, turned like the placement), 12 triangles wound outwards
+        static XmlElement BoxChild(XmlDocument d, List<V3> c, int type, int room)
+        {
+            V3 mn = new V3(1e9, 1e9, 1e9), mx = new V3(-1e9, -1e9, -1e9); foreach (V3 v in c) { mn = new V3(Math.Min(mn.X, v.X), Math.Min(mn.Y, v.Y), Math.Min(mn.Z, v.Z)); mx = new V3(Math.Max(mx.X, v.X), Math.Max(mx.Y, v.Y), Math.Max(mx.Z, v.Z)); }
+            V3 ctr = (mn + mx) * 0.5; StringBuilder s = new StringBuilder();
+            s.Append("<Item type=\"GeometryBVH\">" + VecXml("BoxMin", mn) + VecXml("BoxMax", mx) + VecXml("BoxCenter", ctr) + VecXml("SphereCenter", ctr) + "<SphereRadius value=\"" + Fs((mx - mn).Len() * 0.5) + "\" /><Margin value=\"0.04\" /><Volume value=\"1\" /><Inertia x=\"1\" y=\"1\" z=\"1\" /><MaterialIndex value=\"0\" /><MaterialColourIndex value=\"0\" /><ProceduralID value=\"0\" /><RoomID value=\"" + room + "\" /><PedDensity value=\"0\" /><UnkFlags value=\"0\" /><PolyFlags value=\"0\" /><UnkType value=\"1\" />");
+            s.Append("<CompositeTransform>1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</CompositeTransform><CompositeFlags1>" + Flags1 + "</CompositeFlags1><CompositeFlags2>" + Flags2 + "</CompositeFlags2>");
+            s.Append(VecXml("GeometryCenter", new V3(0, 0, 0)) + "<UnkFloat1 value=\"0\" /><UnkFloat2 value=\"0\" /><Materials><Item><Type value=\"" + type + "\" /><ProceduralID value=\"0\" /><RoomID value=\"" + room + "\" /><PedDensity value=\"0\" /><Flags>NONE</Flags><MaterialColourIndex value=\"0\" /><Unk value=\"0\" /></Item></Materials><Vertices>");
+            foreach (V3 v in c) s.Append(Fs(v.X) + ", " + Fs(v.Y) + ", " + Fs(v.Z) + "\n");
+            s.Append("</Vertices><Polygons>");
+            int[][] q = new int[][] { new int[] { 1, 3, 7, 5 }, new int[] { 0, 4, 6, 2 }, new int[] { 2, 6, 7, 3 }, new int[] { 0, 1, 5, 4 }, new int[] { 4, 5, 7, 6 }, new int[] { 0, 2, 3, 1 } };          // (corner i: x from bit 0, y bit 1, z bit 2)
+            foreach (int[] f in q)
+            {
+                s.Append("<Triangle m=\"0\" v1=\"" + f[0] + "\" v2=\"" + f[1] + "\" v3=\"" + f[2] + "\" f1=\"0\" f2=\"0\" f3=\"0\" />");
+                s.Append("<Triangle m=\"0\" v1=\"" + f[0] + "\" v2=\"" + f[2] + "\" v3=\"" + f[3] + "\" f1=\"0\" f2=\"0\" f3=\"0\" />");
+            }
+            s.Append("</Polygons></Item>");
+            XmlDocument t = new XmlDocument(); t.LoadXml(s.ToString()); return (XmlElement)d.ImportNode(t.DocumentElement, true);
         }
 
         static Dictionary<string, MloArchetype> mloCache = new Dictionary<string, MloArchetype>();

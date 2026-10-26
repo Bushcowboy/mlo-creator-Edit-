@@ -2,6 +2,13 @@
 
 Changes on the `feature/game-interiors` branch, newest first. Each entry says how it was tested. "Not tested in game" means it compiles and passes the checks listed, but nobody has loaded it in GTA V / FiveM yet: report what breaks and the next push fixes it.
 
+## 2026-10-26 (9) — Server and world: fix collision between MLOs
+
+- In the 3D view, *Fix its collision* on a resource: click a piece of its collision lines to select it (yellow; the rest of its part dimmer), *Take it out* (Delete) or *The whole part* (Shift+Delete), *Add a box here* (B) standing on the clicked point with its width, depth and height, Undo (Ctrl+Z).
+- *Write the fixed files* writes a fixed copy of every changed collision file to the output folder (`output\<resource>_collision_fix\<same path>`, with a README of the changes). **Your server folder is never changed**: copy the files over the originals yourself (keep a backup) and restart the resource. Encrypted files cannot be fixed.
+- Interior collision: added boxes are put into the interior's own space by the placement nearest to them, so they line up with every placement; a file that was one shape becomes a composite with the new boxes as children.
+- Tested: a load of the test area records file / part / polygon for every collision piece; taking 2 pieces out and adding a box gives a file with 10 + 12 triangles, the box 0..1 m from the interior's origin, the README entry, nothing written in the server folder; in the browser: picking by clicking the view, Delete, B, writing. **Not tested in game.**
+
 ## 2026-10-26 (8) — Server and world: the area in 3D
 
 - **Look in 3D** (an MLO selected on the map, or any spot you click): the area around it, 20–300 m round, with the game's buildings (grey; read from your GTA V install, nearest first), your resources' MLOs and plain map entities in their resource colours, the game's collision as orange lines and your resources' collision in their colours. Collision of two sources crossing inside each other is what clashes.

@@ -559,6 +559,7 @@ namespace MloCreator
                     if (aa == "load" && method == "POST") { Area.Start(Json.DeserializeObject(ReadBody(c)) as Dictionary<string, object>, GtaDefault(), Path.Combine(Root, "cache")); Reply(c, 200, "{\"ok\":true}", "application/json"); return; }
                     if (aa == "status") { Dictionary<string, object> st = Area.StatusInfo(); if (string.IsNullOrEmpty((string)st["status"]) && Area.Busy) st["status"] = Vanilla.Status; Reply(c, 200, Json.Serialize(st), "application/json"); return; }
                     if (aa == "result") { Reply(c, 200, Json.Serialize(Area.Result()), "application/json"); return; }
+                    if (aa == "fix" && method == "POST") { Dictionary<string, object> r; lock (ExportLock) { r = Area.Fix(Json.DeserializeObject(ReadBody(c)) as Dictionary<string, object>, (string)Settings()["outDir"]); } Reply(c, 200, Json.Serialize(r), "application/json"); return; }
                     Reply(c, 404, "{\"ok\":false,\"error\":\"unknown api\"}", "application/json");
                 }
                 catch (Exception ex) { Reply(c, 200, Json.Serialize(new Dictionary<string, object> { { "ok", false }, { "error", ex.Message } }), "application/json"); }
