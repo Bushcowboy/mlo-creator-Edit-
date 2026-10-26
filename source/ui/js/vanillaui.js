@@ -183,10 +183,7 @@ window.MLO = window.MLO || {};
     VU.renderExport = function (root) {
         const P = S.project, X = P.export, V = P.vanilla, k = kit(); ex = {};
         const text = (key, ph) => el('input', { type: 'text', class: 'grow', value: X[key] || '', placeholder: ph || '', oninput: (e) => { X[key] = e.target.value; Model.touch(); } });
-        root.append(el('div', { class: 'h' }, 'Resource'));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Folder'), text('resource', 'mlo_' + (safeRes(P.name) || 'house'))));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Prefix'), el('input', { type: 'text', class: 'grow', value: P.prefix, maxlength: 8, title: 'Every model in the pack starts with this. Keep it unique on your server.', oninput: (e) => { P.prefix = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8); Model.touch(); } })));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Label'), text('label', P.name)));
+        M.UI.renderNames(root, text);
         root.append(el('div', { class: 'h' }, 'Where it goes'));
         const pl = placement(P);
         if (!pl) root.append(el('div', { class: 'note', style: { color: '#f0a4a3' } }, 'No house has been grabbed yet. Use the House tab first.'));
@@ -222,8 +219,8 @@ window.MLO = window.MLO || {};
         if (!pl) { toast('Grab a house first.', 'warn'); return; }
         const built = Shell.build(P, { mode: 'export', autoLights: X.autoLights });
         if (!built.batches.length) { toast('The interior is empty: grab a house or add a room first.', 'warn'); return; }
-        if (!P.prefix) { toast('Give the project a prefix first.', 'warn'); return; }
-        const resource = safeRes(X.resource) || ('mlo_' + (safeRes(P.name) || 'house'));
+        const N = Model.exportNames(P); if (!N.prefix) { toast('Give the project a prefix first.', 'warn'); return; }
+        const resource = N.resource;
         ex.btn.disabled = true; ex.btn.textContent = 'Exporting...';
         try {
             log('Meshing: ' + built.stats.tris + ' triangles, ' + built.stats.boxes + ' collision boxes, ' + built.stats.portals + ' portals, ' + built.stats.lights + ' lights');
@@ -232,7 +229,7 @@ window.MLO = window.MLO || {};
             const patch = anyCut ? { enabled: true, gta: P.vanilla.gta || '', frame: { ox: pl.x, oy: pl.y, oz: pl.z, heading: pl.heading }, ceilH: P.settings.ceilH, rects: Shell.regionRects(P.shell), openings: built.shell.resolved,
                 doors: X.cutDoor !== false, windows: X.cutWindows !== false, collision: X.cutCollision !== false, occluders: X.cutOccluders !== false } : undefined;
             if (patch) log('Cutting the game files for this house (the first run reads the game, about half a minute)...');
-            const model = Mesher.toExport(P, built, { light: {}, model: { resource, prefix: P.prefix, label: X.label || P.name, timecycle: 'hash_E83C53FC', placement: pl, entranceNote: 'the grabbed house door at ' + (P.vanilla.door || '').replace(/\s+/g, ' ').trim(), outDir: X.outDir || undefined, patch } });
+            const model = Mesher.toExport(P, built, { light: {}, model: { resource, prefix: N.prefix, label: X.label || P.name, timecycle: 'hash_E83C53FC', placement: pl, entranceNote: 'the grabbed house door at ' + (P.vanilla.door || '').replace(/\s+/g, ' ').trim(), outDir: X.outDir || undefined, patch } });
             const res = await Model.api('export', 'POST', model);
             if (!res.ok) { log('Export failed: ' + res.error, 'bad'); console.error(res.detail); }
             else {

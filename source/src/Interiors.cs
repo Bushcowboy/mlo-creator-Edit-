@@ -440,7 +440,7 @@ namespace MloCreator
             {
                 if (!Ready) throw new Exception("Build the list of the game's interiors first.");
                 string res = Regex(J.S(J.G(spec, "resource"), ""), "combined_interior", 40);
-                string P = Regex(J.S(J.G(spec, "prefix"), ""), "cmb", 10).ToLowerInvariant() + "_"; string mlo = P + "mlo", label = J.S(J.G(spec, "label"), res);
+                string P = Regex(J.S(J.G(spec, "prefix"), ""), "cmb", 40).ToLowerInvariant() + "_"; string mlo = P + "mlo", label = J.S(J.G(spec, "label"), res);
                 Dictionary<string, object> pl = J.O(J.G(spec, "placement"));
                 double wx = J.D(J.G(pl, "x"), 0), wy = J.D(J.G(pl, "y"), 0), wz = J.D(J.G(pl, "z"), 0), wh = J.D(J.G(pl, "heading"), 0);
                 Xf world = new Xf(Q.Yaw(wh), new V3(wx, wy, wz));

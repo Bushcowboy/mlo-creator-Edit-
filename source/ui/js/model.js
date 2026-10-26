@@ -319,7 +319,26 @@ window.MLO = window.MLO || {};
         }
     };
 
-    M.Model = { bldAll, switchBuilding, addBuilding, renameBuilding, deleteBuilding, withBuilding, state, bus, api, apiRaw, saveAs, touch, edit, undo, redo, save, listProjects, openProject, createProject, renameProject, renameAny, duplicate, deleteProject, saveThumb, openedAt, cur, ensureLevels, ops, newLevel, newProject, upgrade, hist, loadRef, saveRef, safeName };
+    // ---- export names: developer_project for every file the resource makes itself (lowercase, letters and digits); the game files a project replaces keep their own names ----
+    let developer = '';
+    const slug = (s, n) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, n);
+    const safeRes = (s) => (s || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+    async function loadSettings() { try { const s = await api('settings'); developer = (s && s.developer) || ''; } catch (e) { } try { if (!developer) developer = localStorage.getItem('mlo.developer') || ''; } catch (e) { } return developer; }
+    async function setDeveloper(name) {
+        developer = String(name || '').trim().slice(0, 40); try { localStorage.setItem('mlo.developer', developer); } catch (e) { }
+        try { await api('settings', 'POST', { developer }); } catch (e) { }
+        bus.emit('names');
+    }
+    function getDeveloper() { return developer; }
+    // { prefix, resource, auto }: the prefix has no trailing _ (the host adds it); the first building of a project uses it as it is, the others add _2, _3...
+    function exportNames(P, nameOverride) {
+        const X = (P && P.export) || {};
+        if (X.autoNames === false) return { prefix: (P.prefix || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30), resource: safeRes(X.resource) || ('mlo_' + (safeRes(P.name) || 'house')), auto: false };
+        const parts = [slug(developer, 20), slug(nameOverride != null ? nameOverride : P.name, 20)].filter(Boolean), base = parts.join('_') || slug(P.prefix, 20) || 'mlo';
+        return { prefix: base, resource: base, auto: true };
+    }
+
+    M.Model = { loadSettings, setDeveloper, getDeveloper, exportNames, bldAll, switchBuilding, addBuilding, renameBuilding, deleteBuilding, withBuilding, state, bus, api, apiRaw, saveAs, touch, edit, undo, redo, save, listProjects, openProject, createProject, renameProject, renameAny, duplicate, deleteProject, saveThumb, openedAt, cur, ensureLevels, ops, newLevel, newProject, upgrade, hist, loadRef, saveRef, safeName };
 })(window.MLO);
 
 

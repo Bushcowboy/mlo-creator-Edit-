@@ -185,14 +185,31 @@ window.MLO = window.MLO || {};
     }
     function safeRes(s) { return (s || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40); }
 
+    // the names of the exported files: developer_project_ (Settings: the developer is the same for every project), or a folder and prefix typed in
+    function renderNames(root, text) {
+        const P = S.project, X = P.export, box = el('div');
+        const draw = () => {
+            box.innerHTML = ''; const N = Model.exportNames(P);
+            box.append(el('div', { class: 'row' }, el('label', null, 'Developer'), el('input', { type: 'text', class: 'grow', value: Model.getDeveloper(), placeholder: 'your name or team, e.g. Bushcowboy', maxlength: 40, title: 'Used in the name of every file you export, in every project', onchange: async (e) => { await Model.setDeveloper(e.target.value); draw(); } })));
+            box.append(el('label', { class: 'chk' }, el('input', { type: 'checkbox', checked: X.autoNames !== false ? true : null, onchange: (e) => { X.autoNames = e.target.checked; if (!e.target.checked && !X.resource) X.resource = N.resource; if (!e.target.checked) P.prefix = N.prefix.slice(0, 30); Model.touch(); draw(); } }), 'Name the files after the developer and the project'));
+            if (N.auto) {
+                box.append(el('div', { class: 'note' }, 'Files ', el('b', null, N.prefix + '_...'), ', folder ', el('b', null, N.resource), '. Rename the project to change them.' + (Model.getDeveloper() ? '' : ' Type a developer name to put it in front.')));
+            } else {
+                box.append(el('div', { class: 'row' }, el('label', null, 'Folder'), text('resource', 'mlo_' + (safeRes(P.name) || 'house'))));
+                box.append(el('div', { class: 'row' }, el('label', null, 'Prefix'), el('input', { type: 'text', class: 'grow', value: P.prefix, maxlength: 30, title: 'Every model in the pack starts with this. Keep it unique on your server.', oninput: (e) => { P.prefix = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30); Model.touch(); } })));
+            }
+            box.append(el('div', { class: 'note' }, 'Game files the export replaces (a cut building model, its collision, occluders) keep the game\'s own names, so they replace the originals.'));
+        };
+        root.append(el('div', { class: 'h' }, 'Resource')); draw(); root.append(box);
+        root.append(el('div', { class: 'row' }, el('label', null, 'Label'), text('label', P.name)));
+    }
+    UI.renderNames = renderNames;
+
     let exportEls = {};
     function renderExport(root) {
         const P = S.project, X = P.export, E = exportEls = {};
         const text = (key, ph, w) => el('input', { type: 'text', class: 'grow', value: X[key] || '', placeholder: ph || '', oninput: (e) => { X[key] = e.target.value; Model.touch(); } });
-        root.append(el('div', { class: 'h' }, 'Resource'));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Folder'), text('resource', 'mlo_' + (safeRes(P.name) || 'house'))));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Prefix'), el('input', { type: 'text', class: 'grow', value: P.prefix, maxlength: 8, title: 'Every model in the pack starts with this. Keep it unique on your server.', oninput: (e) => { P.prefix = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8); Model.touch(); } })));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Label'), text('label', P.name)));
+        renderNames(root, text);
         root.append(el('div', { class: 'h' }, 'Where it goes'));
         E.ent = el('div', { class: 'note' }); root.append(E.ent);
         root.append(el('div', { class: 'note' }, 'In the game, stand in the doorway of the real spot and copy your coordinates, e.g. ', el('b', null, 'vec4(x, y, z, heading)'), '.'));
@@ -229,13 +246,13 @@ window.MLO = window.MLO || {};
         E.log.innerHTML = ''; E.after.style.display = 'none';
         if (!built.batches.length) { toast('Nothing to export yet. Build walls and floors first.', 'warn'); return; }
         const pl = computePlacement(P, built); if (pl.error) { toast(pl.error, 'warn'); return; }
-        if (!P.prefix) { toast('Give the project a prefix first.', 'warn'); return; }
-        const resource = safeRes(X.resource) || ('mlo_' + (safeRes(P.name) || 'house'));
+        const N = Model.exportNames(P); if (!N.prefix) { toast('Give the project a prefix first.', 'warn'); return; }
+        const resource = N.resource;
         E.btn.disabled = true; E.btn.textContent = 'Exporting...';
         try {
             log('Meshing: ' + built.stats.tris + ' triangles, ' + built.stats.boxes + ' collision boxes, ' + built.stats.portals + ' portals, ' + built.stats.lights + ' lights');
             if (!built.portals.length) log('Warning: no windows or doors on an outside wall, so the interior is never visible from outside. Add an entrance door.', 'bad');
-            const model = Mesher.toExport(P, built, { light: {}, model: { resource, prefix: P.prefix, label: X.label || P.name, timecycle: 'hash_E83C53FC', placement: { x: pl.x, y: pl.y, z: pl.z, heading: pl.heading }, entranceNote: pl.note, outDir: X.outDir || undefined } });
+            const model = Mesher.toExport(P, built, { light: {}, model: { resource, prefix: N.prefix, label: X.label || P.name, timecycle: 'hash_E83C53FC', placement: { x: pl.x, y: pl.y, z: pl.z, heading: pl.heading }, entranceNote: pl.note, outDir: X.outDir || undefined } });
             const res = await Model.api('export', 'POST', model);
             if (!res.ok) { log('Export failed: ' + res.error, 'bad'); console.error(res.detail); }
             else {

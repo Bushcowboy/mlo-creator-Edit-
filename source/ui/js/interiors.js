@@ -47,7 +47,7 @@
 
     // ---------- state ----------
     const S = {
-        name: '', saved: true, diskName: '', sel: null, details: {}, loading: {}, index: { ready: false, busy: false, status: '', error: '', gta: '' },
+        name: '', saved: true, diskName: '', developer: '', sel: null, details: {}, loading: {}, index: { ready: false, busy: false, status: '', error: '', gta: '' },
         query: '', results: null, total: 0, view: { cx: 0, cy: 0, scale: 8 }, zlo: '', zhi: '', result: null, exporting: false, undo: [], redo: [],
         combo: null
     };
@@ -427,8 +427,11 @@
             })));
         const near = nearOriginal(); if (near) R.append(el('div', { class: 'note warn' }, near));
         R.append(el('div', { class: 'h' }, 'Export'),
-            el('div', { class: 'row' }, el('label', null, 'Resource'), el('input', { class: 'txt grow', value: C.resource, onchange: (e) => { snapshot(); C.resource = e.target.value.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 40) || 'combined_interior'; changed(true); renderRight(); } })),
-            el('div', { class: 'row' }, el('label', null, 'Name prefix'), el('input', { class: 'txt grow', value: C.prefix, maxlength: 10, title: 'The start of every file and archetype name; must be unique on your server', onchange: (e) => { snapshot(); C.prefix = e.target.value.replace(/[^A-Za-z0-9_]/g, '').slice(0, 10).toLowerCase() || 'cmb'; changed(true); renderRight(); } })),
+            el('div', { class: 'row' }, el('label', null, 'Developer'), el('input', { class: 'txt grow', value: S.developer, maxlength: 40, placeholder: 'your name or team', title: 'Used in the name of every file you export, in every project', onchange: async (e) => { S.developer = e.target.value.trim().slice(0, 40); try { localStorage.setItem('mlo.developer', S.developer); } catch (err) { } try { await api('settings', 'POST', { developer: S.developer }); } catch (err) { } renderRight(); } })),
+            el('label', { class: 'chk' }, el('input', { type: 'checkbox', checked: C.autoNames !== false, onchange: (e) => { snapshot(); const N = names(); C.autoNames = e.target.checked; if (!e.target.checked) { C.resource = N.resource; C.prefix = N.prefix.slice(0, 30); } changed(true); renderRight(); } }), el('span', null, 'Name the files after the developer and the combination')),
+            C.autoNames !== false ? el('div', { class: 'note' }, 'Files ', el('b', null, names().prefix + '_...'), ', folder ', el('b', null, names().resource), '. Rename the combination (top left) to change them.') : el('div', null,
+                el('div', { class: 'row' }, el('label', null, 'Resource'), el('input', { class: 'txt grow', value: C.resource, onchange: (e) => { snapshot(); C.resource = e.target.value.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 40) || 'combined_interior'; changed(true); renderRight(); } })),
+                el('div', { class: 'row' }, el('label', null, 'Name prefix'), el('input', { class: 'txt grow', value: C.prefix, maxlength: 30, title: 'The start of every file and archetype name; must be unique on your server', onchange: (e) => { snapshot(); C.prefix = e.target.value.replace(/[^A-Za-z0-9_]/g, '').slice(0, 30).toLowerCase() || 'cmb'; changed(true); renderRight(); } }))),
             chk('linkPortals', 'Join doorways that meet into one portal (so you see and walk straight from piece to piece)'),
             chk('collision', 'Bring the game\'s collision of every piece (floors and walls to stand on)'),
             chk('loadOriginals', 'Also load the game\'s own map files of the pieces (only when the copy is far from them). Makes sure the game has the models loaded; the originals then stand at their own places too.'),
@@ -438,6 +441,12 @@
             el('div', { class: 'row' }, el('label', null, 'Heights'), el('input', { class: 'num', type: 'number', placeholder: 'from', value: S.zlo, oninput: (e) => { S.zlo = e.target.value; draw(); } }), el('input', { class: 'num', type: 'number', placeholder: 'to', value: S.zhi, oninput: (e) => { S.zhi = e.target.value; draw(); } })),
             el('div', { class: 'note' }, 'Show only the rooms between two heights (m, in the joined interior) to see one floor of a building with several.'));
         R.scrollTop = scroll;
+    }
+    // developer_combination (lowercase letters and digits), as in the editor's exports
+    function names() {
+        const C = S.combo; if (C.autoNames === false) return { prefix: C.prefix || 'cmb', resource: C.resource || 'combined_interior' };
+        const slug = (t) => (t || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20), base = [slug(S.developer), slug(S.name)].filter(Boolean).join('_') || 'cmb';
+        return { prefix: base, resource: base };
     }
     function chk(key, text) { return el('label', { class: 'chk' }, el('input', { type: 'checkbox', checked: !!S.combo[key], onchange: (e) => { snapshot(); S.combo[key] = e.target.checked; changed(true); } }), el('span', null, text)); }
     // the copy standing on top of the game's own copy
@@ -466,7 +475,7 @@
         if (S.exporting) return; const C = S.combo; S.exporting = true; S.result = null; renderRight();
         try {
             await save().catch(() => { });
-            const spec = { resource: C.resource, prefix: C.prefix, label: C.label || S.name, placement: C.placement, linkPortals: C.linkPortals, collision: C.collision, loadOriginals: C.loadOriginals, pieces: C.pieces.map(p => ({ hash: p.hash, label: p.label, x: p.x, y: p.y, z: p.z, heading: p.heading || 0, q: p.q || undefined, sets: p.sets, place: p.place || 0 })) };
+            const N = names(); const spec = { resource: N.resource, prefix: N.prefix, label: C.label || S.name, placement: C.placement, linkPortals: C.linkPortals, collision: C.collision, loadOriginals: C.loadOriginals, pieces: C.pieces.map(p => ({ hash: p.hash, label: p.label, x: p.x, y: p.y, z: p.z, heading: p.heading || 0, q: p.q || undefined, sets: p.sets, place: p.place || 0 })) };
             S.result = await api('interiors/export', 'POST', spec);
             toast(S.result.ok ? 'Exported "' + S.result.resource + '"' : 'Export failed: ' + S.result.error, S.result.ok ? 'ok' : 'err');
         } catch (e) { S.result = { ok: false, error: e.message }; toast(e.message, 'err'); }
@@ -478,6 +487,8 @@
     async function start() {
         const qs = new URLSearchParams(location.search); let name = qs.get('name');
         S.combo = newCombo();
+        try { const st = await api('settings'); S.developer = (st && st.developer) || ''; } catch (e) { }
+        try { if (!S.developer) S.developer = localStorage.getItem('mlo.developer') || ''; } catch (e) { }
         if (name) {
             try { const p = await api('project?name=' + encodeURIComponent(name)); if (p && p.kind === 'combo' && p.combo) { S.combo = Object.assign(newCombo(), p.combo); S.name = safeName(name); S.diskName = S.name; } else throw new Error('"' + name + '" is not a combination of game interiors.'); }
             catch (e) { toast(e.message, 'err'); name = null; }

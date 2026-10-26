@@ -852,16 +852,13 @@ window.MLO = window.MLO || {};
     }
     function safeRes(s) { return (s || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40); }
     // the prefix of a building's files: the project's prefix for the first building, the prefix and the building's number for the others (a building keeps its number)
-    function prefixOf(P, rec) { const sfx = (rec && rec.sfx && P.import.buildings.length > 1) ? rec.sfx : '', base = (P.prefix || 'mlo').slice(0, 10 - sfx.length); return base + sfx; }       // (a project with one building uses the plain prefix)
+    function prefixOf(P, rec) { const sfx = (rec && rec.sfx && P.import.buildings.length > 1) ? rec.sfx : '', N = Model.exportNames(P), base = (N.prefix || 'mlo').slice(0, 36); return sfx ? base + '_' + sfx : base; }       // (a project with one building uses the plain prefix; developer_project, then developer_project_2...)
     const hasRooms = (d) => d.shell.ops.some(o => o.op === 'add');
     let ex = {};
     UI2.renderExport = function (root) {
         const P = S.project, X = P.export, I = P.import, k = kit(); ex = {};
         const text = (key, ph) => el('input', { type: 'text', class: 'grow', value: X[key] || '', placeholder: ph || '', oninput: (e) => { X[key] = e.target.value; Model.touch(); } });
-        root.append(el('div', { class: 'h' }, 'Resource'));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Folder'), text('resource', 'mlo_' + (safeRes(P.name) || 'house'))));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Prefix'), el('input', { type: 'text', class: 'grow', value: P.prefix, maxlength: 8, title: 'Every model in the pack starts with this. Keep it unique on your server. The second building adds a 2, the third a 3...', oninput: (e) => { P.prefix = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8); Model.touch(); } })));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Label'), text('label', P.name)));
+        M.UI.renderNames(root, text);
         const stepsNow = steps(), stepsOpen = stepsNow.filter(s => !s.done && s.sev !== 'opt').length;
         sec(root, 'e.steps', 'Before you export', { sum: stepsOpen ? stepsOpen + ' to do' : 'all done', open: stepsOpen > 0 }, (b) => UI2.renderChecklist(b, false));
         // what goes into the resource
@@ -910,13 +907,13 @@ window.MLO = window.MLO || {};
         ex.log.innerHTML = ''; ex.after.style.display = 'none';
         if (!IM.targetModel()) { toast('Import the model first.', 'warn'); return; }
         if (!placement(P)) { toast('Set where the model stands in the game first (Import tab).', 'warn'); return; }
-        if (!P.prefix) { toast('Give the project a prefix first.', 'warn'); return; }
+        const N = Model.exportNames(P); if (!N.prefix) { toast('Give the project a prefix first.', 'warn'); return; }
         const all = Model.bldAll(P), todo = all.filter(b => hasRooms(b.d));
         if (!todo.length) { toast('No building has a room yet: add a room first.', 'warn'); return; }
         // a step that matters is still open (no opening, grid never set): say so before writing files (the steps are those of the building being worked on)
         const open = UI2.steps().filter(s => !s.done && s.sev !== 'opt'), musts = open.filter(s => s.sev === 'must');
         if (musts.length && !(await M.UI.confirm('Not everything is done', 'Still open' + (all.length > 1 ? ' in "' + (all.find(b => b.active) || {}).name + '"' : '') + ': ' + musts.map(s => s.title).join('; ') + '.' + (open.length > musts.length ? ' Also missing: ' + open.filter(s => s.sev === 'should').map(s => s.title.toLowerCase()).join('; ') + '.' : '') + ' The result may not work in the game.', 'Export anyway'))) return;
-        const resource = safeRes(X.resource) || ('mlo_' + (safeRes(P.name) || 'house'));
+        const resource = N.resource;
         M.Errors.crumb('export "' + resource + '"');
         ex.btn.disabled = true; ex.btn.textContent = 'Exporting...';
         try {

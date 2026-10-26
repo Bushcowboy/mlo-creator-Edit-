@@ -138,11 +138,13 @@ A block holds many buildings but only one resource can replace the model's files
 
 ## Export
 
-Press Export on the Export tab; the folder goes to `output\<folder>` (or the folder you set). Upload it to the server's resources, `refresh`, `ensure <folder>`. The log and the README in the folder give a test spot inside the interior.
+Press Export on the Export tab; the folder goes to `output\<folder>` (or the folder you set).
+
+**Names.** Every file the export makes itself is named `developer_project_...` (lowercase, letters and digits): developer `Bushcowboy` and project `Casino` give `bushcowboy_casino_int.ydr` in a folder `bushcowboy_casino`. The developer is typed once on the Export tab and kept in `settings.json` for every project; the project name is the one at the top. The second and later buildings of a project add `_2`, `_3`. Untick *Name the files after the developer and the project* to type a folder and prefix yourself. Game files the export replaces (the cut model, its collision, occlusion maps) keep the game's names so they replace the originals. Upload it to the server's resources, `refresh`, `ensure <folder>`. The log and the README in the folder give a test spot inside the interior.
 
 | File | Content |
 |---|---|
-| `<prefix>_int.ydr` | The interior: floors, walls, ceiling, trim, lights |
+| `<prefix>_int.ydr` | The interior: floors, walls, ceiling, trim, lights (`<prefix>` is `developer_project`, see Names above) |
 | `<prefix>_glass.ydr` | Window glass |
 | `<prefix>_mlo.ybn` | Collision for floors, walls and your boxes |
 | `<prefix>_tex.ytd` | Only the textures you used |

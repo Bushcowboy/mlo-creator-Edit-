@@ -225,6 +225,7 @@ window.MLO = window.MLO || {};
         setInterval(() => { Model.api('ping').catch(() => { }); }, 4000);
 
         try { await M.TEX.loadPhotos(); } catch (e) { /* the photo floors are missing: the generated ones still work */ }
+        try { await Model.loadSettings(); } catch (e) { }           // (the developer name the export names files after)
         try { await startProject(); } catch (e) { UI.toast('Could not load a project: ' + e.message, 'err'); Model.state.project = Model.newProject('New House'); bus.emit('project'); }
         UI.renderAll(); App.refreshGrid();
         requestAnimationFrame(frame);

@@ -355,7 +355,7 @@ namespace MloCreator
         // ---------- one interior (one building): meshes, collision, portals, doors, textures, ytyp, ymap and manifest go into the stream folder ----------
         static InteriorInfo WriteInterior(Dictionary<string, object> model, string outRoot, string stream, string work, List<string> log, List<string> files, List<string> warns, List<string> patchedFiles, ref long total, ref bool doorShipped)
         {
-            string P = Safe(J.S(J.G(model, "prefix"), ""), "mlo1", 10) + "_";
+            string P = Safe(J.S(J.G(model, "prefix"), ""), "mlo1", 40) + "_";          // (developer_project, or the prefix typed in)
             if (P.EndsWith("__")) P = P.TrimEnd('_') + "_";
             string label = J.S(J.G(model, "label"), P);
             string timecycle = J.S(J.G(model, "timecycle"), "hash_E83C53FC");
