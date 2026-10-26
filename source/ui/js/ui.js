@@ -129,6 +129,7 @@ window.MLO = window.MLO || {};
             root.append(el('div', { class: 'defrow' }, swatchEl(P.defaults[r[0]], 22), el('span', null, r[1]),
                 el('button', { class: 'btn sm', onclick: () => { Model.edit(PP => { PP.defaults[r[0]] = S.benchSel || S.brush[S.paintTarget]; }); M.App.refreshPanels(); } }, 'Set')));
         });
+        if (M.Look) M.Look.render(root);
     }
 
     // a picture the user picked becomes a texture in the "Mine" group (stored with the project, exported like the others)
@@ -160,7 +161,7 @@ window.MLO = window.MLO || {};
             grid.append(el('div', { class: 'sw' + (x.id === S.benchSel ? ' on' : ''), title: x.name, onclick: () => { S.benchSel = x.id; S.brush[S.paintTarget] = x.id; M.App.refreshPanels(); } }, swatchEl(x.id, 64), el('span', null, x.name)));
         });
         b.append(el('div', { class: 'bench' },
-            el('div', { class: 'cur' }, el('div', { class: 'h' }, 'Texture'), big, el('div', null, el('b', null, t.name), t.kind === 'user'
+            el('div', { class: 'cur' }, el('div', { class: 'h' }, 'Texture'), big, (S.project.look && S.project.look.normalMaps === false) ? null : el('div', { class: 'note', style: { display: 'flex', gap: '6px', alignItems: 'center', margin: '4px 0' } }, TEX.mapSwatch(S.benchSel, 'normal', 40), TEX.mapSwatch(S.benchSel, 'spec', 40), 'normal · specular'), el('div', null, el('b', null, t.name), t.kind === 'user'
                 ? el('div', { class: 'note' }, 'repeats every ', el('input', { type: 'number', step: '0.1', min: '0.2', max: '8', value: t.tile, style: { width: '58px' }, onchange: (e) => { const v = Math.min(8, Math.max(0.2, parseFloat(e.target.value) || 1)); t.tile = v; if (S.ref && S.ref.tex) S.ref.tex.forEach(q => { if (q.id === t.id) q.tile = v; }); Model.saveRef().catch(() => { }); M.App.remesh(); } }), ' m')
                 : el('div', { class: 'note' }, t.cat + ' · repeats every ' + t.tile + ' m'))),
             el('div', null, chips, grid)));

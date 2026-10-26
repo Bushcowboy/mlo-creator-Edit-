@@ -50,6 +50,10 @@ The Build tab shows a route of nine stages that open like dropdowns; a card abov
 8. **Check it.** The checklist and the walk check.
 9. **Export.**
 
+### Materials in the game
+
+Every texture is a pattern made by the program (or a photo, or an image you add). On export each one becomes three textures: the colour, a normal map (`_n`, the bumps: mortar, grout and plank gaps are sunk in) and a specular map (`_s`, what shines: the faces of tiles more than their grout). Surfaces use the game's `normal_spec` shader, with a bumpiness and shine for each kind of material (marble and tile shine, plaster and carpet are matt). The Paint tab has *Normal and specular maps* (untick for flat textures and smaller files) and *Flip the green channel* (tick it if bumps look raised instead of sunk in the game). The 3D view shows the colour only.
+
 ### Room settings
 
 - **Ceiling height** and **wall depth** are in the right panel. *Match the building* picks the ceiling top that most of the building's own wall area has.

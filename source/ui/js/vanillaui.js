@@ -157,6 +157,7 @@ window.MLO = window.MLO || {};
         root.append(el('div', { class: 'h' }, 'Project theme'), el('div', { class: 'note' }, 'What every unpainted surface looks like. Pick a texture below, then press Set.'));
         DEFAULT_ROWS.forEach(r => root.append(el('div', { class: 'defrow' }, k.swatchEl(P.defaults[r[0]], 22), el('span', null, r[1]),
             el('button', { class: 'btn sm', onclick: () => { Model.edit(PP => { PP.defaults[r[0]] = S.benchSel || S.brush[S.paintTarget]; }); M.App.refreshPanels(); } }, 'Set'))));
+        if (M.Look) M.Look.render(root);
     };
 
     // ---------------- right panel ----------------

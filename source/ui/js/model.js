@@ -109,12 +109,29 @@ window.MLO = window.MLO || {};
         try { return fn(); } finally { bSwitch(P, orig); }
     }
 
+    // how the interior looks in the game: normal maps, the default light, wall colour variants (entity sets), skirting, crown and frames, the timecycle
+    function defaultLook() {
+        return {
+            normalMaps: true, flipGreen: false,
+            light: { r: 255, g: 238, b: 210, intensity: 4, range: 6, exponent: 24, type: 'point', coneInner: 30, coneOuter: 70, shadows: true, volume: false, corona: 0, specular: true },
+            variants: [],                      // [{ id, name, swap: { texId: texId } }]: each is an entity set; the default paint is one too
+            skirting: { on: true, h: 0.10, d: 0.015, tex: '' }, crown: { on: false, h: 0.07, d: 0.035, tex: '' },
+            frames: 'detailed', sills: true
+        };
+    }
+    function mergeLook(l) {
+        const d = defaultLook(); l = l || {};
+        const o = Object.assign(d, l); o.light = Object.assign(defaultLook().light, l.light || {}); o.skirting = Object.assign(defaultLook().skirting, l.skirting || {}); o.crown = Object.assign(defaultLook().crown, l.crown || {});
+        o.variants = Array.isArray(l.variants) ? l.variants : []; return o;
+    }
+
     function newProject(name, kind) {
         const p = {
             version: 1, kind: kind === 'vanilla' ? 'vanilla' : (kind === 'import' ? 'import' : 'grid'), name: name || 'New House', prefix: 'mlo' + randId(),
             settings: { storyHeight: 3.1, wallThickness: 0.2, slab: 0.2, foundation: 0.5 },
             defaults: defaultsFor(), levels: [newLevel()], entrance: null,
-            export: { resource: '', label: '', coords: '', pedZ: true, floorAbove: 0.1, autoLights: true, outDir: '' }
+            export: { resource: '', label: '', coords: '', pedZ: true, floorAbove: 0.1, autoLights: true, outDir: '' },
+            look: defaultLook()
         };
         if (p.kind === 'vanilla') {
             // interior shell inside a house that already exists in the game: placement comes from the grabbed house
@@ -139,7 +156,7 @@ window.MLO = window.MLO || {};
         const d = newProject(p.name, p.kind);
         p.kind = d.kind;
         p.settings = Object.assign(d.settings, p.settings || {}); p.defaults = Object.assign(d.defaults, p.defaults || {});
-        p.export = Object.assign(d.export, p.export || {}); p.prefix = p.prefix || d.prefix;
+        p.export = Object.assign(d.export, p.export || {}); p.prefix = p.prefix || d.prefix; p.look = mergeLook(p.look);
         p.levels = (p.levels && p.levels.length ? p.levels : [newLevel()]).map(l => Object.assign(newLevel(), l));
         if (p.entrance === undefined) p.entrance = null;
         if (p.kind === 'vanilla') { p.vanilla = Object.assign(d.vanilla, p.vanilla || {}); p.vanilla.nudge = Object.assign({ dz: 0, dh: 0 }, p.vanilla.nudge || {}); p.shell = Object.assign(newShell(), p.shell || {}); }
@@ -338,7 +355,7 @@ window.MLO = window.MLO || {};
         return { prefix: base, resource: base, auto: true };
     }
 
-    M.Model = { loadSettings, setDeveloper, getDeveloper, exportNames, bldAll, switchBuilding, addBuilding, renameBuilding, deleteBuilding, withBuilding, state, bus, api, apiRaw, saveAs, touch, edit, undo, redo, save, listProjects, openProject, createProject, renameProject, renameAny, duplicate, deleteProject, saveThumb, openedAt, cur, ensureLevels, ops, newLevel, newProject, upgrade, hist, loadRef, saveRef, safeName };
+    M.Model = { defaultLook, mergeLook, loadSettings, setDeveloper, getDeveloper, exportNames, bldAll, switchBuilding, addBuilding, renameBuilding, deleteBuilding, withBuilding, state, bus, api, apiRaw, saveAs, touch, edit, undo, redo, save, listProjects, openProject, createProject, renameProject, renameAny, duplicate, deleteProject, saveThumb, openedAt, cur, ensureLevels, ops, newLevel, newProject, upgrade, hist, loadRef, saveRef, safeName };
 })(window.MLO);
 
 

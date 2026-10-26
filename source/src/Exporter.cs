@@ -22,7 +22,7 @@ namespace MloCreator
         public double Len() { return Math.Sqrt(X * X + Y * Y + Z * Z); }
     }
 
-    class MatData { public string Tex; public bool Glass; public float[] Pos, Nrm, Uv; public int[] Idx; }
+    class MatData { public string Tex; public bool Glass, Nm; public double Bump = 1, Spec = 0.2, Fall = 40; public float[] Pos, Nrm, Uv; public int[] Idx; }      // Nm: normal_spec with a normal map (tex_n) and a specular map (tex_s)
     class LightData { public double X, Y, Z; public int R, G, B; public double Intensity, Falloff, Exponent; }
     class GroupData
     {
@@ -96,6 +96,35 @@ namespace MloCreator
                 }
         }
 
+        // per-vertex tangents (x y z w) from the UVs: x y z points along +u in the surface, w says which way +v runs (the normal map's frame)
+        static double[] Tangents(MatData m)
+        {
+            int nv = m.Pos.Length / 3; double[] t = new double[nv * 3], b = new double[nv * 3], o = new double[nv * 4];
+            for (int i = 0; i + 2 < m.Idx.Length; i += 3)
+            {
+                int a = m.Idx[i], c1 = m.Idx[i + 1], c2 = m.Idx[i + 2]; if (a >= nv || c1 >= nv || c2 >= nv) continue;
+                double e1x = m.Pos[c1 * 3] - m.Pos[a * 3], e1y = m.Pos[c1 * 3 + 1] - m.Pos[a * 3 + 1], e1z = m.Pos[c1 * 3 + 2] - m.Pos[a * 3 + 2];
+                double e2x = m.Pos[c2 * 3] - m.Pos[a * 3], e2y = m.Pos[c2 * 3 + 1] - m.Pos[a * 3 + 1], e2z = m.Pos[c2 * 3 + 2] - m.Pos[a * 3 + 2];
+                double du1 = m.Uv[c1 * 2] - m.Uv[a * 2], dv1 = m.Uv[c1 * 2 + 1] - m.Uv[a * 2 + 1], du2 = m.Uv[c2 * 2] - m.Uv[a * 2], dv2 = m.Uv[c2 * 2 + 1] - m.Uv[a * 2 + 1];
+                double det = du1 * dv2 - du2 * dv1; if (Math.Abs(det) < 1e-12) continue; double r = 1.0 / det;
+                double tx = (e1x * dv2 - e2x * dv1) * r, ty = (e1y * dv2 - e2y * dv1) * r, tz = (e1z * dv2 - e2z * dv1) * r;
+                double bx = (e2x * du1 - e1x * du2) * r, by = (e2y * du1 - e1y * du2) * r, bz = (e2z * du1 - e1z * du2) * r;
+                foreach (int v in new int[] { a, c1, c2 }) { t[v * 3] += tx; t[v * 3 + 1] += ty; t[v * 3 + 2] += tz; b[v * 3] += bx; b[v * 3 + 1] += by; b[v * 3 + 2] += bz; }
+            }
+            for (int v = 0; v < nv; v++)
+            {
+                double nx = m.Nrm[v * 3], ny = m.Nrm[v * 3 + 1], nz = m.Nrm[v * 3 + 2], tx = t[v * 3], ty = t[v * 3 + 1], tz = t[v * 3 + 2];
+                double d = nx * tx + ny * ty + nz * tz; tx -= nx * d; ty -= ny * d; tz -= nz * d;           // (in the surface)
+                double l = Math.Sqrt(tx * tx + ty * ty + tz * tz);
+                if (l < 1e-9) { tx = -ny; ty = nx; tz = 0; l = Math.Sqrt(tx * tx + ty * ty); if (l < 1e-9) { tx = 1; ty = 0; tz = 0; l = 1; } }
+                tx /= l; ty /= l; tz /= l;
+                double cx = ny * tz - nz * ty, cy = nz * tx - nx * tz, cz = nx * ty - ny * tx;                       // normal x tangent
+                double w = (cx * b[v * 3] + cy * b[v * 3 + 1] + cz * b[v * 3 + 2]) < 0 ? -1 : 1;
+                o[v * 4] = tx; o[v * 4 + 1] = ty; o[v * 4 + 2] = tz; o[v * 4 + 3] = w;
+            }
+            return o;
+        }
+
         static string DrawableXml(string name, GroupData g, string px)
         {
             V3 mn, mx; Bounds(g, out mn, out mx);
@@ -127,6 +156,24 @@ namespace MloCreator
                     s.AppendLine("     <Item name=\"specularIntensityMult\" type=\"Vector\" x=\"0.1\" y=\"0\" z=\"0\" w=\"0\" />");
                     s.AppendLine("     <Item name=\"specularFalloffMult\" type=\"Vector\" x=\"220\" y=\"0\" z=\"0\" w=\"0\" />");
                     s.AppendLine("     <Item name=\"specularFresnel\" type=\"Vector\" x=\"0.98\" y=\"0\" z=\"0\" w=\"0\" />");
+                    s.AppendLine("     <Item name=\"globalAnimUV1\" type=\"Vector\" x=\"0\" y=\"1\" z=\"0\" w=\"0\" />");
+                    s.AppendLine("     <Item name=\"globalAnimUV0\" type=\"Vector\" x=\"1\" y=\"0\" z=\"0\" w=\"0\" />");
+                }
+                else if (m.Nm)
+                {
+                    // the game's normal_spec: colour, normal map (bumps of mortar, grout, planks) and specular map (what shines and how much)
+                    s.AppendLine("    <Name>normal_spec</Name>\n    <FileName>normal_spec.sps</FileName>\n    <RenderBucket value=\"0\" />\n    <Parameters>");
+                    s.AppendLine("     <Item name=\"DiffuseSampler\" type=\"Texture\">\n      <Name>" + px + m.Tex + "</Name>\n     </Item>");
+                    s.AppendLine("     <Item name=\"BumpSampler\" type=\"Texture\">\n      <Name>" + px + m.Tex + "_n</Name>\n     </Item>");
+                    s.AppendLine("     <Item name=\"SpecSampler\" type=\"Texture\">\n      <Name>" + px + m.Tex + "_s</Name>\n     </Item>");
+                    s.AppendLine("     <Item name=\"HardAlphaBlend\" type=\"Vector\" x=\"1\" y=\"0\" z=\"0\" w=\"0\" />");
+                    s.AppendLine("     <Item name=\"useTessellation\" type=\"Vector\" x=\"0\" y=\"0\" z=\"0\" w=\"0\" />");
+                    s.AppendLine("     <Item name=\"wetnessMultiplier\" type=\"Vector\" x=\"1\" y=\"0\" z=\"0\" w=\"0\" />");
+                    s.AppendLine("     <Item name=\"bumpiness\" type=\"Vector\" x=\"" + F(m.Bump) + "\" y=\"0\" z=\"0\" w=\"0\" />");
+                    s.AppendLine("     <Item name=\"specularIntensityMult\" type=\"Vector\" x=\"" + F(m.Spec) + "\" y=\"0\" z=\"0\" w=\"0\" />");
+                    s.AppendLine("     <Item name=\"specularFalloffMult\" type=\"Vector\" x=\"" + F(m.Fall) + "\" y=\"0\" z=\"0\" w=\"0\" />");
+                    s.AppendLine("     <Item name=\"specularFresnel\" type=\"Vector\" x=\"0.97\" y=\"0\" z=\"0\" w=\"0\" />");
+                    s.AppendLine("     <Item name=\"specMapIntMask\" type=\"Vector\" x=\"1\" y=\"0\" z=\"0\" w=\"0\" />");
                     s.AppendLine("     <Item name=\"globalAnimUV1\" type=\"Vector\" x=\"0\" y=\"1\" z=\"0\" w=\"0\" />");
                     s.AppendLine("     <Item name=\"globalAnimUV0\" type=\"Vector\" x=\"1\" y=\"0\" z=\"0\" w=\"0\" />");
                 }
@@ -163,12 +210,14 @@ namespace MloCreator
                 s.AppendLine("     <ShaderIndex value=\"" + shaderIndex + "\" />");
                 s.AppendLine("     <BoundingBoxMin x=\"" + F(gmn.X) + "\" y=\"" + F(gmn.Y) + "\" z=\"" + F(gmn.Z) + "\" w=\"" + F(gmn.X) + "\" />");
                 s.AppendLine("     <BoundingBoxMax x=\"" + F(gmx.X) + "\" y=\"" + F(gmx.Y) + "\" z=\"" + F(gmx.Z) + "\" w=\"" + F(gmx.X) + "\" />");
-                s.AppendLine("     <VertexBuffer>\n      <Flags value=\"0\" />\n      <Layout type=\"GTAV1\">\n       <Position />\n       <Normal />\n       <Colour0 />\n       <TexCoord0 />" + (m.Glass ? "\n       <Tangent />" : "") + "\n      </Layout>\n      <Data>");
+                s.AppendLine("     <VertexBuffer>\n      <Flags value=\"0\" />\n      <Layout type=\"GTAV1\">\n       <Position />\n       <Normal />\n       <Colour0 />\n       <TexCoord0 />" + (m.Glass || m.Nm ? "\n       <Tangent />" : "") + "\n      </Layout>\n      <Data>");
+                double[] tan = m.Nm ? Tangents(m) : null;
                 for (int i = 0; i < nv; i++)
                 {
                     double nx = m.Nrm[i * 3], ny = m.Nrm[i * 3 + 1], nz = m.Nrm[i * 3 + 2];
                     string line = "       " + F(m.Pos[i * 3]) + " " + F(m.Pos[i * 3 + 1]) + " " + F(m.Pos[i * 3 + 2]) + "   " + F(nx) + " " + F(ny) + " " + F(nz) + "   255 255 255 255   " + F(m.Uv[i * 2]) + " " + F(m.Uv[i * 2 + 1]);
-                    if (m.Glass)
+                    if (tan != null) line += "   " + F(tan[i * 4]) + " " + F(tan[i * 4 + 1]) + " " + F(tan[i * 4 + 2]) + " " + F(tan[i * 4 + 3]);
+                    else if (m.Glass)
                     {
                         // tangent = up x normal
                         double tx = -ny, ty = nx, tz = 0; double tl = Math.Sqrt(tx * tx + ty * ty); if (tl < 1e-9) { tx = 1; ty = 0; } else { tx /= tl; ty /= tl; }
@@ -374,7 +423,8 @@ namespace MloCreator
                     {
                         Dictionary<string, object> md = J.O(mo);
                         MatData m = new MatData();
-                        m.Tex = Safe(J.S(J.G(md, "tex"), "paint"), "paint", 24); m.Glass = J.B(J.G(md, "glass"), false);
+                        m.Tex = Safe(J.S(J.G(md, "tex"), "paint"), "paint", 32); m.Glass = J.B(J.G(md, "glass"), false);
+                        m.Nm = !m.Glass && J.B(J.G(md, "nm"), false); m.Bump = J.D(J.G(md, "bump"), 1); m.Spec = J.D(J.G(md, "spec"), 0.2); m.Fall = J.D(J.G(md, "fall"), 40);
                         m.Pos = Floats(J.S(J.G(md, "pos"), "")); m.Nrm = Floats(J.S(J.G(md, "nrm"), "")); m.Uv = Floats(J.S(J.G(md, "uv"), "")); m.Idx = Ints(J.S(J.G(md, "idx"), ""));
                         if (m.Idx.Length == 0 || m.Pos.Length == 0) continue;
                         if (m.Pos.Length / 3 > 65000) throw new Exception("Part '" + g.Name + "' / texture '" + m.Tex + "' has " + (m.Pos.Length / 3) + " vertices; the game limit is 65535 per material. Use fewer or simpler walls.");
@@ -398,7 +448,8 @@ namespace MloCreator
                 foreach (object to in J.A(J.G(model, "textures")))
                 {
                     Dictionary<string, object> td = J.O(to);
-                    TexData t = new TexData(); t.Name = Safe(J.S(J.G(td, "name"), "tex"), "tex", 24); t.Size = J.I(J.G(td, "size"), 256); t.Alpha = false;
+                    TexData t = new TexData(); t.Name = Safe(J.S(J.G(td, "name"), "tex"), "tex", 34); t.Size = J.I(J.G(td, "size"), 256); t.Alpha = false;
+                    string usage = J.S(J.G(td, "usage"), "DIFFUSE").ToUpperInvariant(); t.Usage = usage == "NORMAL" || usage == "SPECULAR" ? usage : "DIFFUSE";
                     byte[] rgba = Convert.FromBase64String(J.S(J.G(td, "rgba"), ""));
                     if (rgba.Length != t.Size * t.Size * 4) throw new Exception("Texture " + t.Name + " has the wrong pixel data size.");
                     t.Argb = new int[t.Size * t.Size];
@@ -415,6 +466,7 @@ namespace MloCreator
                 }
                 HashSet<string> have = new HashSet<string>(); foreach (TexData t in texs) have.Add(t.Name);
                 foreach (GroupData g in groups) foreach (MatData m in g.Mats) if (!m.Glass && !have.Contains(m.Tex)) warns.Add("texture '" + m.Tex + "' was used but not supplied");
+                foreach (GroupData g in groups) foreach (MatData m in g.Mats) if (m.Nm && (!have.Contains(m.Tex + "_n") || !have.Contains(m.Tex + "_s"))) { m.Nm = false; warns.Add("texture '" + m.Tex + "' came without its normal or specular map, so it uses the plain shader"); }
                 string ddsDir = Path.Combine(work, "dds"); Directory.CreateDirectory(ddsDir);
                 foreach (TexData t in texs) Dds.Write(Path.Combine(ddsDir, P + t.Name + ".dds"), t.Argb, t.Size, t.Alpha);
                 string txdXml = TxdXml(texs, P);

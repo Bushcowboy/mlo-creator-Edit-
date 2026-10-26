@@ -411,9 +411,16 @@ window.MLO = window.MLO || {};
         });
         const L = extra.light || {};
         groups.int.lights = built.lights.slice(0, 48).map(l => ({ x: l.x, y: l.y, z: l.z, r: 255, g: 238, b: 210, intensity: L.intensity || 4, falloff: L.falloff || 6, exponent: L.exponent || 24 }));
+        const look = (M.Model && M.Model.mergeLook) ? M.Model.mergeLook(project.look) : { normalMaps: false }, nm = look.normalMaps !== false;
+        // a material with a normal map and a specular map: the game's normal_spec shader, with the bumpiness and shine of its kind of surface
+        const matOut = (m) => {
+            const o = { tex: m.tex, glass: m.glass, pos: M.toB64(new Float32Array(m.pos)), nrm: M.toB64(new Float32Array(m.nrm)), uv: M.toB64(new Float32Array(m.uv)), idx: M.toB64(new Int32Array(m.idx)) };
+            if (nm && !m.glass) { const sf = TEX.surface(m.tex); o.nm = true; o.bump = sf.bump; o.spec = sf.spec; o.fall = sf.fall; }
+            return o;
+        };
         const outGroups = Object.keys(groups).map(k => groups[k]).filter(g => g.mats.length > 0).map(g => ({
-            name: g.name, room: g.room, flags: g.flags, lod: g.lod, lights: g.lights,
-            mats: g.mats.map(m => ({ tex: m.tex, glass: m.glass, pos: M.toB64(new Float32Array(m.pos)), nrm: M.toB64(new Float32Array(m.nrm)), uv: M.toB64(new Float32Array(m.uv)), idx: M.toB64(new Int32Array(m.idx)) }))
+            name: g.name, room: g.room, flags: g.flags, lod: g.lod, lights: g.lights, set: g.set || undefined,
+            mats: g.mats.map(matOut)
         }));
         // collision: 8 vertices per box
         const verts = [], tris = [];
@@ -427,8 +434,11 @@ window.MLO = window.MLO || {};
             const quad = (a, b2, c, d) => { tris.push(v + a, v + b2, v + c, mi, v + c, v + d, v + a, mi); };
             quad(1, 2, 6, 5); quad(3, 0, 4, 7); quad(2, 3, 7, 6); quad(0, 1, 5, 4); quad(4, 5, 6, 7); quad(3, 2, 1, 0);
         });
-        const textures = [...usedTex].map(id => {
-            const t = TEX.pixels(id); return { name: id, size: t.size, rgba: M.toB64(new Uint8Array(t.data.buffer, t.data.byteOffset, t.data.byteLength)) };
+        const textures = [];
+        [...usedTex].forEach(id => {
+            const t = TEX.pixels(id), b64 = (a) => M.toB64(new Uint8Array(a.buffer, a.byteOffset, a.byteLength));
+            textures.push({ name: id, size: t.size, rgba: b64(t.data) });
+            if (nm) { const mp = TEX.maps(id, look.flipGreen); textures.push({ name: id + '_n', size: mp.size, rgba: b64(mp.normal), usage: 'NORMAL' }, { name: id + '_s', size: mp.size, rgba: b64(mp.spec), usage: 'SPECULAR' }); }
         });
         return Object.assign({
             groups: outGroups,
