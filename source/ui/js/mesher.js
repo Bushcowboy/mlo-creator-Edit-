@@ -380,7 +380,7 @@ window.MLO = window.MLO || {};
         for (let kk = 0; kk <= nLev; kk++) buildSlabs(kk);
         if (exportMode) {
             if (opts.autoLights !== false) for (let k = 0; k < nLev; k++) buildLights(k);
-            for (let k = 0; k < nLev; k++) (lv[k].lights || []).forEach(l => lights.push({ x: l.x, y: l.y, z: (k + 1) * H - S - 0.15 }));
+            for (let k = 0; k < nLev; k++) (lv[k].lights || []).forEach(l => lights.push({ x: l.x, y: l.y, z: (k + 1) * H - S - 0.15 - (l.own && l.own.drop ? +l.own.drop : 0), own: l.own || null }));
         }
 
         // ---- finish ----
@@ -421,7 +421,13 @@ window.MLO = window.MLO || {};
             } else add(b.group, b, b.tex, 1);
         });
         const L = extra.light || {};
-        groups.int.lights = built.lights.slice(0, 48).map(l => ({ x: l.x, y: l.y, z: l.z, r: 255, g: 238, b: 210, intensity: L.intensity || 4, falloff: L.falloff || 6, exponent: L.exponent || 24 }));
+        // every light: the project's light (Paint tab > Lights), and what a placed light has of its own
+        const LD = ((M.Model && M.Model.mergeLook) ? M.Model.mergeLook(project.look) : {}).light || {};
+        groups.int.lights = built.lights.slice(0, 48).map(l => {
+            const o = Object.assign({}, LD, l.own || {});
+            return { x: l.x, y: l.y, z: l.z, r: o.r != null ? o.r : 255, g: o.g != null ? o.g : 238, b: o.b != null ? o.b : 210, intensity: o.intensity || L.intensity || 4, falloff: o.range || L.falloff || 6, exponent: o.exponent || L.exponent || 24,
+                type: o.type === 'spot' ? 'spot' : 'point', coneInner: o.coneInner || 30, coneOuter: o.coneOuter || 70, shadows: o.shadows !== false, volume: !!o.volume, corona: +o.corona || 0, specular: o.specular !== false };
+        });
         const look = (M.Model && M.Model.mergeLook) ? M.Model.mergeLook(project.look) : { normalMaps: false }, nm = look.normalMaps !== false;
         // a material with a normal map and a specular map: the game's normal_spec shader, with the bumpiness and shine of its kind of surface
         const matOut = (m) => {

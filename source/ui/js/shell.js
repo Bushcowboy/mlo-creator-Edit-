@@ -80,6 +80,9 @@ window.MLO = window.MLO || {};
         // walls = 'skin' (imported models only): the walls are the building's own wall faces turned to look into the rooms, so they cannot be off by a millimetre;
         // no wall pieces or wall collision are made from the room edges (the game's own collision of the building stays). Openings, trim and portals still are.
         const skin = project.kind === 'import' && cfg.walls === 'skin';
+        // the finishing touches (project.look): skirting along the floor, crown moulding under the ceiling, detailed casings and window sills
+        const LK = (M.Model && M.Model.mergeLook) ? M.Model.mergeLook(project.look) : { skirting: { on: false }, crown: { on: false }, frames: 'simple', sills: false };
+        const SK = LK.skirting, CR = LK.crown, detailed = LK.frames === 'detailed', skTex = (SK.tex && TEX.byId[SK.tex]) ? SK.tex : D.trim, crTex = (CR.tex && TEX.byId[CR.tex]) ? CR.tex : D.trim;
         const acc = new Map(), batches = [], boxes = [], matList = [], matIdx = new Map(), portals = [], lights = [];
         const bmn = [1e9, 1e9, 1e9], bmx = [-1e9, -1e9, -1e9];
         const stats = { tris: 0, boxes: 0, portals: 0, lights: 0, warnings: [] };
@@ -217,8 +220,16 @@ window.MLO = window.MLO || {};
             moves.forEach(m => { if (m[1]) m[0].u1 += m[2]; else m[0].u0 -= m[2]; });
         }
         // a piece of wall: inner face over [u0,u1] x [z0,z1]; collision box reaches `depth` outward and `ext` past the ends
+        // a board along the inside face of a wall: u0..u1, z0..z1, standing d into the room; at the ends of the wall it reaches d further, so corners close
+        function board(sg, u0, u1, z0, z1, d, tex) {
+            const ci = ciOf(sg), e = ci + sg.inward * d, eLo = Math.abs(u0 - sg.u0) < 1e-6 ? d : 0, eHi = Math.abs(u1 - sg.u1) < 1e-6 ? d : 0;
+            if (u1 - u0 < 0.02) return;
+            if (sg.o === 'H') box('wall', 'int', tex, u0 - eLo, Math.min(ci, e), z0, u1 + eHi, Math.max(ci, e), z1); else box('wall', 'int', tex, Math.min(ci, e), u0 - eLo, z0, Math.max(ci, e), u1 + eHi, z1);
+        }
         function wallPiece(sg, u0, u1, z0, z1, extLo, extHi) {
             if (u1 - u0 < 1e-5 || z1 - z0 < 1e-5) return;
+            if (SK.on && z0 < 1e-4 && z1 > SK.h) board(sg, u0, u1, 0, Math.min(SK.h, z1), SK.d, skTex);                     // skirting (also under windows)
+            if (CR.on && z1 > H - 1e-4 && H - z0 > CR.h) board(sg, u0, u1, H - CR.h, H, CR.d, crTex);                      // crown moulding (also over doors)
             const tex = sg.tex || D.wallInt, ci = ciOf(sg);
             // (walls = 'skin' has no wall faces of its own, but still the collision: the building's collision is cleared out of the rooms, so the walls need it from here)
             if (!skin) { if (sg.o === 'H') pq('wall', 'int', tex, false, 'y', ci, z0, z1, u0, u1, sg.inward); else pq('wall', 'int', tex, false, 'x', ci, u0, u1, z0, z1, sg.inward); }
@@ -238,7 +249,19 @@ window.MLO = window.MLO || {};
                 if (a1 - a0 < 1e-5 || b1 - b0 < 1e-5) return;
                 if (sg.o === 'H') box('wall', 'int', D.trim, a0, Math.min(e0, e1), b0, a1, Math.max(e0, e1), b1); else box('wall', 'int', D.trim, Math.min(e0, e1), a0, b0, Math.max(e0, e1), a1, b1);
             };
-            plate(u0 - cw, u0, z0, z1 + cw); plate(u1, u1 + cw, z0, z1 + cw); plate(u0, u1, z1, z1 + cw); if (z0 > 0.05) plate(u0, u1, z0 - cw, z0);
+            plate(u0 - cw, u0, z0, z1 + cw); plate(u1, u1 + cw, z0, z1 + cw); plate(u0, u1, z1, z1 + cw); if (z0 > 0.05 && !(detailed && LK.sills)) plate(u0, u1, z0 - cw, z0);
+            if (detailed) {
+                // a second, thicker step on the opening's edge (a bead), so the casing has a profile instead of a flat plate
+                const bw = 0.022, e2 = e0 + sg.inward * (thick + 0.012), bead = (a0, a1, b0, b1) => { if (a1 - a0 < 1e-5 || b1 - b0 < 1e-5) return; if (sg.o === 'H') box('wall', 'int', D.trim, a0, Math.min(e0, e2), b0, a1, Math.max(e0, e2), b1); else box('wall', 'int', D.trim, Math.min(e0, e2), a0, b0, Math.max(e0, e2), a1, b1); };
+                bead(u0 - bw, u0, z0, z1 + bw); bead(u1, u1 + bw, z0, z1 + bw); bead(u0 - bw, u1 + bw, z1, z1 + bw);
+            }
+        }
+        // a window board: a sill reaching into the room under the opening, with a thin apron under it
+        function sill(sg, u0, u1, z0) {
+            if (z0 < 0.25) return;
+            const ci = ciOf(sg), out = ci + sg.inward * 0.07, ap = ci + sg.inward * 0.014, x0 = u0 - 0.06, x1 = u1 + 0.06;
+            if (sg.o === 'H') { box('wall', 'int', D.trim, x0, Math.min(ci, out), z0 - 0.028, x1, Math.max(ci, out), z0); box('wall', 'int', D.trim, u0 - 0.02, Math.min(ci, ap), z0 - 0.1, u1 + 0.02, Math.max(ci, ap), z0 - 0.028); }
+            else { box('wall', 'int', D.trim, Math.min(ci, out), x0, z0 - 0.028, Math.max(ci, out), x1, z0); box('wall', 'int', D.trim, Math.min(ci, ap), u0 - 0.02, z0 - 0.1, Math.max(ci, ap), u1 + 0.02, z0 - 0.028); }
         }
 
         segs.forEach(sg => {
@@ -257,6 +280,7 @@ window.MLO = window.MLO || {};
                     revealQuad(sg, 'z', op.z1, op.u0, op.u1, 0, 0, -1); if (op.z0 > 1e-4) revealQuad(sg, 'z', op.z0, op.u0, op.u1, 0, 0, 1);
                     if (!op.face) casing(sg, op.u0, op.u1, op.z0, op.z1, 0.02, 'int');
                 }
+                if (op.type === 'window' && detailed && LK.sills && !op.face) sill(sg, op.u0, op.u1, op.z0);
                 if (op.type === 'window' && !op.face) {
                     // frame, mullions and glass at the middle of the wall depth
                     const wc = sg.c - sg.inward * outD / 2 + sg.inward * T / 2, fb = 0.045, fd = 0.03, zc = (op.z0 + op.z1) / 2, uc = (op.u0 + op.u1) / 2;
@@ -266,6 +290,11 @@ window.MLO = window.MLO || {};
                     if (op.u1 - op.u0 > 0.6) fbox(uc - 0.015, uc + 0.015, op.z0 + fb, op.z1 - fb, 0.025);
                     if (op.z1 - op.z0 > 0.7) fbox(op.u0 + fb, op.u1 - fb, zc - 0.015, zc + 0.015, 0.025);
                     const gu0 = op.u0 + fb, gu1 = op.u1 - fb, gz0 = op.z0 + fb, gz1 = op.z1 - fb;
+                    if (detailed) {
+                        // glazing beads: thin strips that hold the glass, on the room side of it
+                        const bb = 0.014, bo = sg.inward * 0.012, bbox = (a0, a1, b0, b1) => { const c0 = wc + bo - 0.007, c1 = wc + bo + 0.007; if (sg.o === 'H') box('wall', 'int', D.trim, a0, Math.min(c0, c1), b0, a1, Math.max(c0, c1), b1); else box('wall', 'int', D.trim, Math.min(c0, c1), a0, b0, Math.max(c0, c1), a1, b1); };
+                        bbox(gu0, gu0 + bb, gz0, gz1); bbox(gu1 - bb, gu1, gz0, gz1); bbox(gu0 + bb, gu1 - bb, gz0, gz0 + bb); bbox(gu0 + bb, gu1 - bb, gz1 - bb, gz1);
+                    }
                     if (sg.o === 'H') { pq('glass', 'glass', 'glass', true, 'y', wc + 0.003, gz0, gz1, gu0, gu1, 1); pq('glass', 'glass', 'glass', true, 'y', wc - 0.003, gz0, gz1, gu0, gu1, -1); cbox(gu0, wc - 0.015, gz0, gu1, wc + 0.015, gz1, 112, 0); }
                     else { pq('glass', 'glass', 'glass', true, 'x', wc + 0.003, gu0, gu1, gz0, gz1, 1); pq('glass', 'glass', 'glass', true, 'x', wc - 0.003, gu0, gu1, gz0, gz1, -1); cbox(wc - 0.015, gu0, gz0, wc + 0.015, gu1, gz1, 112, 0); }
                 }
@@ -304,10 +333,13 @@ window.MLO = window.MLO || {};
             spans.forEach(sp => { if (sp.o !== pt.o || pt.c < sp.n0 - 0.03 || pt.c > sp.n1 + 0.03) return; const u0 = Math.max(sp.u0, pt.u0), u1 = Math.min(sp.u1, pt.u1); if (u1 - u0 >= 0.04 && sp.z1 - sp.z0 >= 0.1) pops.push({ u0, u1, z0: sp.z0, z1: sp.z1 }); });
             const ops = pops.sort((a, b) => a.u0 - b.u0), tex = pt.texA || D.wallInt, texB = pt.texB || D.wallInt;
             const lo = pt.c - PT / 2, hi = pt.c + PT / 2, ctype = TEX.colType(tex);
+            const strip = (u0, u1, z0, z1, d, t) => { if (u1 - u0 < 0.02) return; if (pt.o === 'H') { box('wall', 'int', t, u0, hi, z0, u1, hi + d, z1); box('wall', 'int', t, u0, lo - d, z0, u1, lo, z1); } else { box('wall', 'int', t, hi, u0, z0, hi + d, u1, z1); box('wall', 'int', t, lo - d, u0, z0, lo, u1, z1); } };
             const piece = (u0, u1, z0, z1) => {
                 if (u1 - u0 < 1e-5 || z1 - z0 < 1e-5) return;
                 if (pt.o === 'H') { pq('wall', 'int', texB, false, 'y', hi, z0, z1, u0, u1, 1); pq('wall', 'int', tex, false, 'y', lo, z0, z1, u0, u1, -1); cbox(u0, lo, z0, u1, hi, z1, ctype, 0); }
                 else { pq('wall', 'int', texB, false, 'x', hi, u0, u1, z0, z1, 1); pq('wall', 'int', tex, false, 'x', lo, u0, u1, z0, z1, -1); cbox(lo, u0, z0, hi, u1, z1, ctype, 0); }
+                if (SK.on && z0 < 1e-4 && z1 > SK.h) strip(u0, u1, 0, SK.h, SK.d, skTex);
+                if (CR.on && z1 > H - 1e-4 && H - z0 > CR.h) strip(u0, u1, H - CR.h, H, CR.d, crTex);
             };
             const cap = (u, sign) => { if (pt.o === 'H') pq('wall', 'int', D.trim, false, 'x', u, lo, hi, 0, H, sign); else pq('wall', 'int', D.trim, false, 'y', u, 0, H, lo, hi, sign); };
             const jamb = (u, sign, z0, z1) => { if (pt.o === 'H') pq('wall', 'int', D.trim, false, 'x', u, lo, hi, z0, z1, sign); else pq('wall', 'int', D.trim, false, 'y', u, z0, z1, lo, hi, sign); };
@@ -440,7 +472,7 @@ window.MLO = window.MLO || {};
                 }
             });
         }
-        if (exportMode) (S.lights || []).forEach(l => lights.push({ x: l.x, y: l.y, z: H - 0.15 }));
+        if (exportMode) (S.lights || []).forEach(l => lights.push({ x: l.x, y: l.y, z: H - 0.15 - (l.own && l.own.drop ? +l.own.drop : 0), own: l.own || null }));
 
         batches.forEach(b => { b.pos = new Float32Array(b.pos); b.nrm = new Float32Array(b.nrm); b.uv = new Float32Array(b.uv); b.idx = new Uint16Array(b.idx); });
         stats.boxes = boxes.length; stats.portals = portals.length; stats.lights = lights.length;

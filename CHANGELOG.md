@@ -2,6 +2,16 @@
 
 Changes on the `feature/game-interiors` branch, newest first. Each entry says how it was tested. "Not tested in game" means it compiles and passes the checks listed, but nobody has loaded it in GTA V / FiveM yet: report what breaks and the next push fixes it.
 
+## 2026-10-26 (5) — Skirting, crown moulding, detailed openings, light settings
+
+- Paint tab, *Trim* (imported-model and grabbed-house projects): skirting boards along the floor (height, depth, own texture; they run under windows, stop at doorways and close the corners), crown moulding under the ceiling (also over doors), on room walls and on both faces of partitions.
+- *Openings: Detailed*: the casing round doors and windows gets a raised bead, window glass gets glazing beads, and *Window sills* adds a window board reaching 7 cm into the room with an apron under it. Openings cut from the model's own faces keep the model's frame.
+- Paint tab, *Lights*: the project's light (colour with presets, intensity, range, falloff, point or downward spot with cone angles, corona, shadows, volumetric shafts, specular highlights), and every placed light can have its own settings (*own*), including hanging lower.
+- On export: spot lights are written as spots with their cones; shadows set the light flags 0x40/0x80/0x100, volume 0x1000, no-specular 0x2000 (from the game's light flag list).
+- **Older projects** get skirting and detailed openings on their next export (the new defaults). Untick or pick *Simple* to keep the old look.
+- Not yet for *Whole new building* projects (they build walls differently).
+- Tested: shell builder in Node (skirting 0–10 cm, stops at the doorway, runs under the window, closes the corner; crown under the ceiling; sill under the window; placed light hangs lower); real exporter + CodeWalker: spot type, 20/40° cone, shadow flags, colours, range; browser checks. **Not tested in game**: how the flags and cones look.
+
 ## 2026-10-26 (4) — Wall colour schemes as entity sets
 
 - Paint tab, *Wall colours (entity sets)*: add colour schemes; in each, swap any texture used inside (pick a texture in the bench, then *Use picked*). *Show* previews a scheme in the 3D view.

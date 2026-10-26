@@ -23,7 +23,7 @@ namespace MloCreator
     }
 
     class MatData { public string Tex; public bool Glass, Nm; public double Bump = 1, Spec = 0.2, Fall = 40; public float[] Pos, Nrm, Uv; public int[] Idx; }      // Nm: normal_spec with a normal map (tex_n) and a specular map (tex_s)
-    class LightData { public double X, Y, Z; public int R, G, B; public double Intensity, Falloff, Exponent; }
+    class LightData { public double X, Y, Z; public int R, G, B; public double Intensity, Falloff, Exponent, ConeInner = 5, ConeOuter = 90, Corona; public bool Spot, Shadows, Volume, Specular = true; }
     class GroupData
     {
         public string Name, Set; public int Room, Flags; public double Lod;          // Set: the entity set this part belongs to (wall colour variants), null = always there
@@ -246,12 +246,14 @@ namespace MloCreator
                     s.AppendLine("  <Item>");
                     s.AppendLine("   " + Vec("Position", new V3(l.X, l.Y, l.Z)));
                     s.AppendLine("   <Colour r=\"" + l.R + "\" g=\"" + l.G + "\" b=\"" + l.B + "\" />");
-                    s.AppendLine("   <Flashiness value=\"0\" />\n   <Intensity value=\"" + F(l.Intensity) + "\" />\n   <Flags value=\"0\" />\n   <BoneId value=\"0\" />\n   <Type>Point</Type>\n   <GroupId value=\"0\" />\n   <TimeFlags value=\"16777215\" />");
+                    // light flags (the game's list): 0x40 casts shadows, 0x80 / 0x100 from static / moving things, 0x1000 draws its volume, 0x2000 no specular highlight
+                    int lf = (l.Shadows ? 0x40 | 0x80 | 0x100 : 0) | (l.Volume ? 0x1000 : 0) | (l.Specular ? 0 : 0x2000);
+                    s.AppendLine("   <Flashiness value=\"0\" />\n   <Intensity value=\"" + F(l.Intensity) + "\" />\n   <Flags value=\"" + lf + "\" />\n   <BoneId value=\"0\" />\n   <Type>" + (l.Spot ? "Spot" : "Point") + "</Type>\n   <GroupId value=\"0\" />\n   <TimeFlags value=\"16777215\" />");
                     s.AppendLine("   <Falloff value=\"" + F(l.Falloff) + "\" />\n   <FalloffExponent value=\"" + F(l.Exponent) + "\" />");
                     s.AppendLine("   <CullingPlaneNormal x=\"0\" y=\"0\" z=\"1\" />\n   <CullingPlaneOffset value=\"" + F(l.Falloff) + "\" />\n   <Unknown45 value=\"0\" />\n   <Unknown46 value=\"0\" />");
                     s.AppendLine("   <VolumeIntensity value=\"1\" />\n   <VolumeSizeScale value=\"1\" />\n   <VolumeOuterColour r=\"255\" g=\"255\" b=\"255\" />\n   <LightHash value=\"" + (600 + n * 7) + "\" />");
-                    s.AppendLine("   <VolumeOuterIntensity value=\"1\" />\n   <CoronaSize value=\"0\" />\n   <VolumeOuterExponent value=\"1\" />\n   <LightFadeDistance value=\"0\" />\n   <ShadowBlur value=\"0\" />\n   <ShadowFadeDistance value=\"0\" />\n   <SpecularFadeDistance value=\"0\" />\n   <VolumetricFadeDistance value=\"0\" />\n   <ShadowNearClip value=\"0.1\" />");
-                    s.AppendLine("   <CoronaIntensity value=\"0\" />\n   <CoronaZBias value=\"0.1\" />\n   <Direction x=\"0\" y=\"0\" z=\"-1\" />\n   <Tangent x=\"1\" y=\"0\" z=\"0\" />\n   <ConeInnerAngle value=\"5\" />\n   <ConeOuterAngle value=\"90\" />\n   <Extent x=\"1\" y=\"1\" z=\"1\" />\n   <ProjectedTextureHash />");
+                    s.AppendLine("   <VolumeOuterIntensity value=\"1\" />\n   <CoronaSize value=\"" + F(l.Corona) + "\" />\n   <VolumeOuterExponent value=\"1\" />\n   <LightFadeDistance value=\"0\" />\n   <ShadowBlur value=\"0\" />\n   <ShadowFadeDistance value=\"0\" />\n   <SpecularFadeDistance value=\"0\" />\n   <VolumetricFadeDistance value=\"0\" />\n   <ShadowNearClip value=\"0.1\" />");
+                    s.AppendLine("   <CoronaIntensity value=\"" + (l.Corona > 0 ? "1" : "0") + "\" />\n   <CoronaZBias value=\"0.1\" />\n   <Direction x=\"0\" y=\"0\" z=\"-1\" />\n   <Tangent x=\"1\" y=\"0\" z=\"0\" />\n   <ConeInnerAngle value=\"" + F(l.ConeInner) + "\" />\n   <ConeOuterAngle value=\"" + F(l.ConeOuter) + "\" />\n   <Extent x=\"1\" y=\"1\" z=\"1\" />\n   <ProjectedTextureHash />");
                     s.AppendLine("  </Item>");
                 }
                 s.AppendLine(" </Lights>");
@@ -459,6 +461,9 @@ namespace MloCreator
                         LightData l = new LightData(); l.X = J.D(J.G(ld, "x"), 0); l.Y = J.D(J.G(ld, "y"), 0); l.Z = J.D(J.G(ld, "z"), 2);
                         l.R = J.I(J.G(ld, "r"), 255); l.G = J.I(J.G(ld, "g"), 238); l.B = J.I(J.G(ld, "b"), 210);
                         l.Intensity = J.D(J.G(ld, "intensity"), 4); l.Falloff = J.D(J.G(ld, "falloff"), 6); l.Exponent = J.D(J.G(ld, "exponent"), 24);
+                        l.Spot = J.S(J.G(ld, "type"), "point") == "spot"; l.ConeInner = Math.Max(1, Math.Min(89, J.D(J.G(ld, "coneInner"), 30))); l.ConeOuter = Math.Max(l.ConeInner + 1, Math.Min(90, J.D(J.G(ld, "coneOuter"), 70)));
+                        if (!l.Spot) { l.ConeInner = 5; l.ConeOuter = 90; }
+                        l.Shadows = J.B(J.G(ld, "shadows"), false); l.Volume = J.B(J.G(ld, "volume"), false); l.Specular = J.B(J.G(ld, "specular"), true); l.Corona = Math.Max(0, Math.Min(4, J.D(J.G(ld, "corona"), 0)));
                         g.Lights.Add(l);
                     }
                     if (g.Mats.Count > 0) groups.Add(g);

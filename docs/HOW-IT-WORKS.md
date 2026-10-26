@@ -58,6 +58,10 @@ Every texture is a pattern made by the program (or a photo, or an image you add)
 
 The Paint tab's *Wall colours* makes colour schemes for the inside. A scheme swaps textures: everything painted Cream Plaster becomes Navy Diamond Paper, say, and the oak floor becomes walnut. *Show* puts a scheme in the view. On export, the surfaces that any scheme swaps are taken out of the interior model and written once per scheme (`<prefix>_pnt0.ydr` with the colours as painted, `_pnt1`... for the schemes); each becomes an entity set of the MLO called `<prefix>_paint_<name>`. The default one is on when the interior loads; a script switches with `DeactivateInteriorEntitySet` / `ActivateInteriorEntitySet` and `RefreshInterior` (the exported README has the names and an example). Keep one colour set on at a time.
 
+### Trim and lights
+
+*Trim* (Paint tab): skirting boards and crown moulding along every wall and partition, with their own height, depth and texture; *Openings: Detailed* adds a bead to door and window casings, glazing beads to the glass and (with *Window sills*) a window board. *Lights* (Paint tab) sets the light every light of the interior uses: colour, intensity, range, falloff, point or downward spot, cone, corona, shadows, volume, specular. A light placed with the Light tool can have its own settings (tick *own* in the list), and can hang lower.
+
 ### Room settings
 
 - **Ceiling height** and **wall depth** are in the right panel. *Match the building* picks the ceiling top that most of the building's own wall area has.
