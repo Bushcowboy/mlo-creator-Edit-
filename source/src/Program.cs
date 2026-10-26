@@ -550,6 +550,18 @@ namespace MloCreator
                 Reply(c, 200, "{\"ok\":true}", "application/json"); return;
             }
             if (api.StartsWith("interiors/")) { HandleInteriors(c, api.Substring(10), method); return; }
+            if (api == "timecycles/list" || api == "timecycles/get")
+            {
+                // the game's timecycle modifiers (reads the game archives the first time, about 10 seconds)
+                try
+                {
+                    string gta = GtaDefault(), cache = Path.Combine(Root, "cache");
+                    Dictionary<string, object> r = api == "timecycles/list" ? Timecycles.List(gta, cache) : Timecycles.Get(gta, cache, c.Request.QueryString["name"]);
+                    Reply(c, 200, Json.Serialize(r), "application/json");
+                }
+                catch (Exception ex) { Reply(c, 200, Json.Serialize(new Dictionary<string, object> { { "ok", false }, { "error", ex.Message } }), "application/json"); }
+                return;
+            }
             Reply(c, 404, "{\"ok\":false,\"error\":\"unknown api\"}", "application/json");
         }
 

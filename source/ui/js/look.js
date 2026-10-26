@@ -113,6 +113,61 @@ window.MLO = window.MLO || {};
         } else root.append(el('div', { class: 'note' }, 'Place lights with the Light tool (L) to give single ones their own settings.'));
     });
 
+    // ---- timecycle: how the game lights and grades the inside ----
+    // variables of the game's interior modifiers (names as in the game's timecycle_mods files); [name, label, min, max, step, default]; colours are _col_r/_g/_b
+    const TCV = [
+        ['postfx_exposure', 'Exposure', -3, 3, 0.05, -0.9],
+        ['natural_ambient_multiplier', 'Daylight through windows', 0, 1, 0.01, 0.15],
+        ['artificial_int_ambient_multiplier', 'Interior ambient', 0, 3, 0.05, 1],
+        ['light_artificial_int_down_intensity', 'Ambient from below', 0, 3, 0.05, 0.2, 'light_artificial_int_down_col', [0.875, 0.91, 0.89]],
+        ['light_artificial_int_up_intensity', 'Ambient from above', 0, 3, 0.05, 0.2, 'light_artificial_int_up_col', [0.871, 0.82, 0.757]],
+        ['postfx_intensity_bloom', 'Bloom', 0, 3, 0.05, 0.35],
+        ['postfx_bright_pass_thresh', 'Bloom threshold', 0, 3, 0.05, 0.5],
+        ['ssao_inten', 'Ambient occlusion', 0, 10, 0.1, 5],
+        ['reflection_tweak_interior_amb', 'Reflection ambient', 0, 30, 0.5, 15],
+        ['ped_light_mult', 'Light on people', 0, 2, 0.05, 0.1, 'ped_light_col', [1, 0.718, 0.502]]
+    ];
+    const tcDefaults = () => { const v = {}; TCV.forEach(d => { v[d[0]] = [d[5], 0]; if (d[6]) ['r', 'g', 'b'].forEach((c, i) => { v[d[6] + '_' + c] = [d[7][i], 1]; }); }); v.postfx_bright_pass_thresh_width = [0.5, 0]; return v; };
+    let tcNames = null, tcErr = '';
+    async function loadTcNames() {
+        if (tcNames) return tcNames; tcErr = '';
+        try { const r = await Model.api('timecycles/list'); if (r.ok) tcNames = r.names; else tcErr = r.error; } catch (e) { tcErr = e.message; }
+        return tcNames;
+    }
+    Look.sections.push(function (root) {
+        const L = look(), T = L.timecycle, N = Model.exportNames(S.project);
+        root.append(el('div', { class: 'h' }, 'Timecycle'));
+        root.append(el('div', { class: 'row' }, M.UI.kit.seg([['default', 'Usual'], ['game', 'The game\'s'], ['custom', 'My own']], T.mode, v => edit(l => { l.timecycle.mode = v; if (v === 'custom' && !l.timecycle.vars) l.timecycle.vars = tcDefaults(); }))));
+        if (T.mode === 'default') root.append(el('div', { class: 'note' }, 'The timecycle MLO Creator always used (hash_E83C53FC). Pick one of the game\'s, or make your own: exposure, ambient light, bloom, shadows in corners...'));
+        const dl = el('datalist', { id: 'tcnames' }); (tcNames || []).forEach(n => dl.append(el('option', { value: n })));
+        const list = () => el('div', { class: 'row' }, el('button', { class: 'btn sm', onclick: async () => { await loadTcNames(); if (tcErr) M.UI.toast('Could not read the game\'s timecycles: ' + tcErr, 'err'); else M.UI.toast(tcNames.length + ' timecycles of the game', 'ok'); M.App.refreshPanels(); } }, tcNames ? tcNames.length + ' from the game' : 'Read the game\'s list'));
+        if (T.mode === 'game') {
+            root.append(el('div', { class: 'row' }, el('label', null, 'Name'), el('input', { type: 'text', class: 'grow', list: 'tcnames', value: T.game || '', placeholder: 'e.g. v_laund_rm', spellcheck: 'false', onchange: (e) => edit(l => { l.timecycle.game = e.target.value.trim(); }) })), dl, list());
+            root.append(el('div', { class: 'note' }, 'The room uses this modifier of the game as it is.' + (tcNames && T.game && tcNames.indexOf(T.game) < 0 ? ' This name is not in the game\'s list.' : '')));
+        }
+        if (T.mode === 'custom') {
+            const vars = T.vars || tcDefaults();
+            root.append(el('div', { class: 'note' }, 'Written into the resource as ', el('b', null, N.prefix + '_tc'), ' (timecycle_mods file, TIMECYCLEMOD_FILE).'));
+            root.append(el('div', { class: 'row' }, el('label', null, 'Start from'), el('input', { type: 'text', class: 'grow', list: 'tcnames', value: T.base || '', placeholder: 'one of the game\'s (optional)', spellcheck: 'false', onchange: async (e) => {
+                const n = e.target.value.trim(); if (!n) return;
+                try { const r = await Model.api('timecycles/get?name=' + encodeURIComponent(n)); if (!r.ok) { M.UI.toast(r.error, 'err'); return; } edit(l => { l.timecycle.base = n; l.timecycle.vars = Object.assign({}, r.vars); }); M.UI.toast('Started from ' + n + ' (' + Object.keys(r.vars).length + ' values)', 'ok'); }
+                catch (err) { M.UI.toast(err.message, 'err'); }
+            } })), dl, list());
+            const setv = (k, a) => edit(l => { const v = l.timecycle.vars || (l.timecycle.vars = tcDefaults()); v[k] = [a, (v[k] && v[k][1] != null) ? v[k][1] : 0]; });
+            TCV.forEach(d => {
+                const on = !!vars[d[0]], cur = on ? vars[d[0]][0] : d[5];
+                // a value the modifier does not set is left to the weather's timecycle: the tick says whether this one is written
+                const row = el('div', { class: 'row', style: { opacity: on ? 1 : 0.55 } }, el('input', { type: 'checkbox', title: on ? 'Set by this modifier (untick to leave it to the weather)' : 'Not set: the weather decides. Tick to set it.', checked: on ? true : null, style: { margin: 0 }, onchange: (e) => edit(l => { const v = l.timecycle.vars || (l.timecycle.vars = {}); if (e.target.checked) { v[d[0]] = [d[5], 0]; if (d[6]) ['r', 'g', 'b'].forEach((ch, i) => { v[d[6] + '_' + ch] = [d[7][i], 1]; }); } else { delete v[d[0]]; if (d[6]) ['r', 'g', 'b'].forEach(ch => { delete v[d[6] + '_' + ch]; }); } }) }),
+                    el('label', { title: d[0], style: { minWidth: '104px' } }, d[1]), el('input', { type: 'range', class: 'grow', disabled: on ? null : true, min: String(d[2]), max: String(d[3]), step: String(d[4]), value: String(cur), oninput: (e) => { e.target.nextSibling.textContent = (+e.target.value).toFixed(2); }, onchange: (e) => setv(d[0], +e.target.value) }), el('span', { class: 'note', style: { margin: 0, width: '36px', textAlign: 'right' } }, on ? (+cur).toFixed(2) : 'off'));
+                if (d[6]) { const c = ['r', 'g', 'b'].map((ch, i) => vars[d[6] + '_' + ch] ? vars[d[6] + '_' + ch][0] : d[7][i]); row.append(el('input', { type: 'color', title: 'colour', disabled: on ? null : true, value: hex(c[0] * 255, c[1] * 255, c[2] * 255), style: { width: '28px', height: '22px', padding: 0, border: 0, background: 'none' }, onchange: (e) => { const u = unhex(e.target.value); edit(l => { const v = l.timecycle.vars || (l.timecycle.vars = tcDefaults()); ['r', 'g', 'b'].forEach((ch, i) => { v[d[6] + '_' + ch] = [Math.round(u[i] / 255 * 1000) / 1000, 1]; }); }); } })); }
+                root.append(row);
+            });
+            const extra = Object.keys(vars).filter(k => !TCV.some(d => d[0] === k || (d[6] && k.indexOf(d[6]) === 0)) && k !== 'postfx_bright_pass_thresh_width');
+            root.append(el('div', { class: 'note' }, (extra.length ? extra.length + ' more values come along from ' + (T.base || 'the start') + ' unchanged. ' : '') + 'The game shows the result only in the game: walk in and compare.'),
+                el('button', { class: 'btn sm', onclick: () => edit(l => { l.timecycle.vars = tcDefaults(); l.timecycle.base = ''; }) }, 'Back to the defaults'));
+        }
+    });
+
     // the view with a scheme's textures (the editor only: the export makes the real parts)
     Look.preview = function (batches) {
         const id = S.lookPreview, P = S.project; if (!id || !P || !P.look) return batches;

@@ -422,7 +422,7 @@ namespace MloCreator
             File.WriteAllText(path, text.Replace("\r\n", "\n"), new UTF8Encoding(false));
         }
 
-        class InteriorInfo { public List<string> Sets = new List<string>(); public string DefaultSet; public List<string> DoorLines = new List<string>(); public List<string> Credits = new List<string>(); public string P, Label, Mlo, EntranceNote, DoorName; public double X, Y, Z, Heading; public int Doors; }
+        class InteriorInfo { public string TcXml, TcName; public List<string> Sets = new List<string>(); public string DefaultSet; public List<string> DoorLines = new List<string>(); public List<string> Credits = new List<string>(); public string P, Label, Mlo, EntranceNote, DoorName; public double X, Y, Z, Heading; public int Doors; }
 
         // ---------- one interior (one building): meshes, collision, portals, doors, textures, ytyp, ymap and manifest go into the stream folder ----------
         static InteriorInfo WriteInterior(Dictionary<string, object> model, string outRoot, string stream, string work, List<string> log, List<string> files, List<string> warns, List<string> patchedFiles, ref long total, ref bool doorShipped)
@@ -638,7 +638,11 @@ namespace MloCreator
                     foreach (string w2 in (List<string>)pr["warnings"]) warns.Add(w2);
                 }
 
-                InteriorInfo info = new InteriorInfo(); foreach (GroupData g in groups) if (g.Set != null && !info.Sets.Contains(P + g.Set)) info.Sets.Add(P + g.Set); info.DefaultSet = onSets.Count > 0 ? onSets[0] : null; info.P = P; info.Label = label; info.Mlo = mlo; info.X = px; info.Y = py; info.Z = pz; info.Heading = hd; info.Doors = doors.Count; info.DoorName = doorName; info.EntranceNote = J.S(J.G(model, "entranceNote"), "none set"); info.Credits = fit.Credits; info.DoorLines = doorLines;
+                InteriorInfo info = new InteriorInfo();
+                // a timecycle modifier of the project's own: written into the resource's timecycle file, and the room uses it
+                Dictionary<string, object> tcm = J.O(J.G(model, "tcmod"));
+                if (tcm != null && J.O(J.G(tcm, "vars")) != null) { info.TcName = Safe(J.S(J.G(tcm, "name"), P + "tc"), P + "tc", 60); info.TcXml = Timecycles.ModifierXml(info.TcName, J.O(J.G(tcm, "vars"))); }
+                foreach (GroupData g in groups) if (g.Set != null && !info.Sets.Contains(P + g.Set)) info.Sets.Add(P + g.Set); info.DefaultSet = onSets.Count > 0 ? onSets[0] : null; info.P = P; info.Label = label; info.Mlo = mlo; info.X = px; info.Y = py; info.Z = pz; info.Heading = hd; info.Doors = doors.Count; info.DoorName = doorName; info.EntranceNote = J.S(J.G(model, "entranceNote"), "none set"); info.Credits = fit.Credits; info.DoorLines = doorLines;
                 return info;
             }
         }
@@ -689,6 +693,16 @@ namespace MloCreator
                 // ---- resource files ----
                 StringBuilder fxs = new StringBuilder("fx_version 'cerulean'\ngame 'gta5'\nlua54 'yes'\nthis_is_a_map 'yes'\n\nauthor 'MLO Creator'\ndescription '" + label.Replace("'", "") + "'\nversion '1.0.0'\n\n-- registers the interior definitions; the manifest and the placement map stay in stream/\n");
                 foreach (InteriorInfo ii in infos) fxs.Append("data_file 'DLC_ITYP_REQUEST' 'stream/" + ii.P + "types.ytyp'\n");
+                // the project's own timecycle modifiers (one file for the resource)
+                List<InteriorInfo> tcs = infos.FindAll(delegate (InteriorInfo q) { return q.TcXml != null; });
+                if (tcs.Count > 0)
+                {
+                    string tcf = "timecycle_mods_" + res + ".xml"; StringBuilder tx = new StringBuilder("<timecycle_modifier_data version=\"1.000000\">\n");
+                    foreach (InteriorInfo ii in tcs) tx.Append(ii.TcXml);
+                    tx.Append("</timecycle_modifier_data>\n"); WriteText(Path.Combine(dir, tcf), tx.ToString());
+                    fxs.Append("\nfiles { '" + tcf + "' }\ndata_file 'TIMECYCLEMOD_FILE' '" + tcf + "'\n");
+                    files.Add(tcf + ": " + tcs.Count + " timecycle modifier(s) of your own"); foreach (InteriorInfo ii in tcs) log.Add("timecycle: " + ii.TcName + " (your own, in " + tcf + ")");
+                }
                 fxs.Append("\nclient_script 'client/ipl.lua'\n");
                 // bushes and trees the game's map places inside the rooms: hidden by a small client script (the map files themselves stay as they are)
                 List<string> plantRows = new List<string>(); List<string> plantNames = new List<string>();

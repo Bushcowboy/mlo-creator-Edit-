@@ -457,11 +457,16 @@ window.MLO = window.MLO || {};
             textures.push({ name: id, size: t.size, rgba: b64(t.data) });
             if (nm) { const mp = TEX.maps(id, look.flipGreen); textures.push({ name: id + '_n', size: mp.size, rgba: b64(mp.normal), usage: 'NORMAL' }, { name: id + '_s', size: mp.size, rgba: b64(mp.spec), usage: 'SPECULAR' }); }
         });
-        return Object.assign({
+        const out = Object.assign({
             groups: outGroups,
             collision: { mats: built.matList, verts: M.toB64(new Float32Array(verts)), tris: M.toB64(new Int32Array(tris)) },
             portals: built.portals, textures, defaultSet: setNames.length ? setNames[0] : undefined, colourSets: setNames
         }, extra.model || {});
+        // the room's timecycle (Paint tab > Timecycle): one of the game's by name, or a modifier of your own written into the resource
+        const tc = look.timecycle || {};
+        if (tc.mode === 'game' && tc.game) out.timecycle = tc.game;
+        else if (tc.mode === 'custom' && tc.vars && Object.keys(tc.vars).length) { const nm = (out.prefix || 'mlo').toLowerCase().replace(/[^a-z0-9_]/g, '') + '_tc'; out.timecycle = nm; out.tcmod = { name: nm, vars: tc.vars }; }
+        return out;
     }
 
     M.Mesher = { build, toExport, stairInfo, stairLanding, OPEN, DIRS };

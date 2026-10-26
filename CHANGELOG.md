@@ -2,6 +2,14 @@
 
 Changes on the `feature/game-interiors` branch, newest first. Each entry says how it was tested. "Not tested in game" means it compiles and passes the checks listed, but nobody has loaded it in GTA V / FiveM yet: report what breaks and the next push fixes it.
 
+## 2026-10-26 (6) — Timecycle editor
+
+- Paint tab, *Timecycle*: *Usual* (what MLO Creator always used), *The game's* (any of the game's timecycle modifiers by name; *Read the game's list* reads every `timecycle_mods` file of your install, plain or binary XML), or *My own*.
+- *My own*: sliders for exposure, daylight through windows, interior ambient, ambient from below and above (with colours), bloom and its threshold, ambient occlusion, reflection ambient, and light on people (with colour). Each value has a tick: unticked values are not written, so the weather's timecycle decides them. *Start from* copies all the values of one of the game's modifiers (values without a slider come along unchanged).
+- On export your own modifier is written to `timecycle_mods_<resource>.xml` at the resource root as `<prefix>_tc`, listed in `files` and registered with `data_file 'TIMECYCLEMOD_FILE'`; the interior's room uses it.
+- Variable names and the file format come from the game's own modifier files (checked against the game's `v_laund_rm`); the `TIMECYCLEMOD_FILE` data file type is in FiveM's documentation.
+- Tested: reading a game modifier file; the exported file, `numMods`, fxmanifest lines and the room's timecycle hash (read back with CodeWalker); host routes; browser checks. **Not tested in game**: how the values look.
+
 ## 2026-10-26 (5) — Skirting, crown moulding, detailed openings, light settings
 
 - Paint tab, *Trim* (imported-model and grabbed-house projects): skirting boards along the floor (height, depth, own texture; they run under windows, stop at doorways and close the corners), crown moulding under the ceiling (also over doors), on room walls and on both faces of partitions.

@@ -116,13 +116,14 @@ window.MLO = window.MLO || {};
             light: { r: 255, g: 238, b: 210, intensity: 4, range: 6, exponent: 24, type: 'point', coneInner: 30, coneOuter: 70, shadows: true, volume: false, corona: 0, specular: true },
             variants: [],                      // [{ id, name, swap: { texId: texId } }]: each is an entity set; the default paint is one too
             skirting: { on: true, h: 0.10, d: 0.015, tex: '' }, crown: { on: false, h: 0.07, d: 0.035, tex: '' },
-            frames: 'detailed', sills: true
+            frames: 'detailed', sills: true,
+            timecycle: { mode: 'default', game: '', base: '', vars: null }          // default: the program's usual one; game: one of the game's by name; custom: your own values (vars: { name: [value, second] })
         };
     }
     function mergeLook(l) {
         const d = defaultLook(); l = l || {};
         const o = Object.assign(d, l); o.light = Object.assign(defaultLook().light, l.light || {}); o.skirting = Object.assign(defaultLook().skirting, l.skirting || {}); o.crown = Object.assign(defaultLook().crown, l.crown || {});
-        o.variants = Array.isArray(l.variants) ? l.variants : []; return o;
+        o.variants = Array.isArray(l.variants) ? l.variants : []; o.timecycle = Object.assign(defaultLook().timecycle, l.timecycle || {}); return o;
     }
 
     // the entity sets the colour schemes become: [{ name, variant }] (variant null = the colours as painted); only schemes that swap something count

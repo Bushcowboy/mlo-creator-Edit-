@@ -62,6 +62,10 @@ The Paint tab's *Wall colours* makes colour schemes for the inside. A scheme swa
 
 *Trim* (Paint tab): skirting boards and crown moulding along every wall and partition, with their own height, depth and texture; *Openings: Detailed* adds a bead to door and window casings, glazing beads to the glass and (with *Window sills*) a window board. *Lights* (Paint tab) sets the light every light of the interior uses: colour, intensity, range, falloff, point or downward spot, cone, corona, shadows, volume, specular. A light placed with the Light tool can have its own settings (tick *own* in the list), and can hang lower.
 
+### Timecycle
+
+The *Timecycle* section of the Paint tab sets how the game lights and grades the inside. *The game's* uses one of the game's timecycle modifiers by name (*Read the game's list* lists them from your install). *My own* makes a modifier: exposure, daylight through windows, ambient light from below and above, bloom, ambient occlusion, reflections and light on people; untick a value to leave it to the weather. *Start from* copies one of the game's modifiers to change it. The export writes it to `timecycle_mods_<resource>.xml` (registered as `TIMECYCLEMOD_FILE`) and the room uses it as `<prefix>_tc`. The editor's view does not show timecycles: check them in the game.
+
 ### Room settings
 
 - **Ceiling height** and **wall depth** are in the right panel. *Match the building* picks the ceiling top that most of the building's own wall area has.
@@ -168,6 +172,7 @@ Press Export on the Export tab; the folder goes to `output\<folder>` (or the fol
 | the occlusion `.ymap` files | The same files without the boxes inside your interior (only when some were inside) |
 | `_fm*.ydr`, `_fd*.ydr` | Window parts and door props from `.glb` models |
 | `client/plants.lua` | Hides the props you removed |
+| `timecycle_mods_<resource>.xml` | Your own timecycle modifier (when you made one) |
 | `fxmanifest.lua`, `client/ipl.lua`, `README.md` | The resource itself and a list of the game files it replaces |
 
 ## Limits
