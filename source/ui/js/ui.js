@@ -297,11 +297,13 @@ window.MLO = window.MLO || {};
             el('div', { class: 'row' }, el('label', null, 'Name'), nameIn),
             card('Interior in an imported model', 'Import a building\'s model files (.ydr, .ytd, .ybn, .ymap), cut doors and windows through its walls, build the rooms inside, place lights and doors. Nothing is generated for you.', 'import', true),
             card('Whole new building', 'Build a new house on a grid: rooms, doors, windows, stairs, levels and a roof.', 'grid', false),
+            el('button', { class: 'btn', style: { display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', marginTop: '8px', whiteSpace: 'normal' }, onclick: () => { closeModal(); try { sessionStorage.setItem('mlo.noauto', '1'); } catch (e) { } location.href = 'interiors.html?new=' + encodeURIComponent(nameIn.value.trim()); } },
+                el('div', { style: { fontWeight: 700 } }, 'The game\'s own interiors'), el('div', { style: { fontWeight: 400, fontSize: '12px', opacity: 0.85, marginTop: '3px' } }, 'Copy a Rockstar interior (the casino, an apartment, an office...) to any place as an MLO you can walk into, or join several of them, like all the pieces of the casino, into one big MLO. Uses the game\'s own models: nothing is copied but the layout and the collision.')),
             el('div', { class: 'foot' }, opts.back ? el('button', { class: 'btn', onclick: () => opts.back() }, 'Back') : (opts.noCancel ? el('button', { class: 'btn', onclick: () => projectsDialog() }, 'Open an existing project') : el('button', { class: 'btn', onclick: closeModal }, 'Cancel')))), { sticky: !!(opts.back || opts.noCancel) });
         setTimeout(() => nameIn.focus(), 30);
     }
     // ---------- the project list: cards with a picture, the kind, when it was opened and edited; open, rename, duplicate, delete ----------
-    const KIND = { import: 'Interior in an imported model', grid: 'New building', vanilla: 'House (older kind)' };
+    const KIND = { import: 'Interior in an imported model', grid: 'New building', vanilla: 'House (older kind)', combo: 'The game\'s own interiors' };
     function ago(iso) {
         if (!iso) return ''; const d = new Date(iso), s = (Date.now() - d.getTime()) / 1000;
         if (s < 60) return 'just now'; if (s < 3600) return Math.round(s / 60) + ' min ago'; if (s < 86400) return Math.round(s / 3600) + ' h ago';

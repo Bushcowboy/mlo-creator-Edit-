@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="mlo-token" content="__TOKEN__">
+<title>Game Interiors</title>
+<link rel="icon" type="image/png" href="logo.png">
+<link rel="stylesheet" href="app.css">
+<style>
+  #ia { position: fixed; inset: 0; display: grid; grid-template-columns: 300px 1fr 320px; grid-template-rows: 46px 1fr 26px; }
+  #ia > header { grid-column: 1 / 4; position: static; }
+  #ia .side { position: static; overflow: auto; padding: 10px 12px; border-radius: 0; border-width: 0 1px 0 0; }
+  #ia .side.r { border-width: 0 0 0 1px; }
+  #planwrap { position: relative; overflow: hidden; background: var(--bg); }
+  #plan { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+  #plan.dragging { cursor: grabbing; }
+  #planhud { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; pointer-events: auto; }
+  #planhud .btn { background: var(--panel); }
+  #planempty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); text-align: center; padding: 30px; pointer-events: none; line-height: 1.6; }
+  #ia > footer { grid-column: 1 / 4; display: flex; align-items: center; gap: 16px; padding: 0 12px; font-size: 12px; color: var(--muted); background: var(--panel); border-top: 1px solid var(--line); }
+  .res { border: 1px solid var(--line); border-radius: var(--r); padding: 7px 9px; margin: 5px 0; background: var(--panel2); }
+  .res .t { font-weight: 600; word-break: break-all; }
+  .res .m { color: var(--muted); font-size: 11.5px; margin-top: 2px; word-break: break-word; }
+  .res .rowb { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .pack { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 12px 0 4px; font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+  .piece { border: 1px solid var(--line); border-left: 4px solid var(--c, var(--accent)); border-radius: var(--r); padding: 7px 9px; margin: 6px 0; background: var(--panel2); cursor: pointer; }
+  .piece.on { border-color: var(--accent); background: rgba(79, 140, 255, .14); border-left-color: var(--c, var(--accent)); }
+  .piece .t { font-weight: 600; overflow-wrap: anywhere; min-width: 0; flex: 1; }
+  .piece .acts { display: flex; gap: 4px; flex: none; }
+  .piece .acts .btn.sm { padding: 2px 7px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 6px; }
+  .grid4 label { display: block; font-size: 10.5px; color: var(--muted); }
+  .num { width: 100%; background: rgba(0, 0, 0, .25); border: 1px solid var(--line2); color: var(--text); border-radius: 4px; padding: 3px 5px; font: inherit; font-size: 12px; }
+  .txt { background: rgba(0, 0, 0, .25); border: 1px solid var(--line2); color: var(--text); border-radius: 4px; padding: 5px 7px; font: inherit; }
+  .txt:focus, .num:focus { outline: none; border-color: var(--accent); }
+  .side .row .grow { min-width: 0; width: 0; }
+  .num { padding: 3px 4px; -moz-appearance: textfield; }
+  .num::-webkit-outer-spin-button, .num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .sets { max-height: 150px; overflow: auto; margin-top: 6px; border-top: 1px solid var(--line); padding-top: 4px; }
+  .sets label { display: flex; gap: 6px; align-items: center; font-size: 12px; padding: 1px 0; word-break: break-all; }
+  .chk { display: flex; gap: 7px; align-items: flex-start; margin: 6px 0; font-size: 12px; cursor: pointer; }
+  .chk input { margin-top: 2px; }
+  .warn { color: var(--amber); }
+  .bad { color: #f0a4a3; }
+  .good { color: #8fdcae; }
+  .log { font: 11.5px/1.45 Consolas, monospace; white-space: pre-wrap; word-break: break-word; background: rgba(0, 0, 0, .25); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; max-height: 220px; overflow: auto; user-select: text; }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin: 6px 0; }
+  .bar > div { height: 100%; width: 40%; background: var(--accent); animation: slide 1.2s infinite linear; }
+  @keyframes slide { from { margin-left: -40%; } to { margin-left: 100%; } }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 5px; border-radius: 1px; }
+</style>
+</head>
+<body>
+<div id="ia">
+  <header id="top">
+    <div class="brand"><img src="logo.png" alt="" width="24" height="24">MLO<span>Creator</span></div>
+    <div class="pname"><input id="projname" spellcheck="false" maxlength="60" title="Name of this combination (it is saved as a project)"><span id="savestate"></span></div>
+    <div style="margin:0 auto;color:var(--muted);font-weight:600;letter-spacing:.02em">Game interiors</div>
+    <div class="actions">
+      <button class="btn" id="b-save" title="Save now (Ctrl+S). It also saves by itself.">Save</button>
+      <button class="btn" id="b-back" title="Back to the project list">Projects</button>
+      <button class="btn primary" id="b-export">Export</button>
+    </div>
+  </header>
+  <aside class="panel side" id="ileft"></aside>
+  <section id="planwrap">
+    <canvas id="plan" tabindex="0"></canvas>
+    <div id="planhud"></div>
+    <div id="planempty"></div>
+  </section>
+  <aside class="panel side r" id="iright"></aside>
+  <footer><span id="hint">Drag a piece to move it, R turns it 90 degrees (Shift+R: 15), Delete removes it. Wheel zooms, drag empty space to pan, Home frames everything.</span><span id="stats" style="margin-left:auto"></span></footer>
+</div>
+<div id="toasts"></div>
+<div id="modal" hidden></div>
+<script src="js/interiors.js"></script>
+</body>
+</html>

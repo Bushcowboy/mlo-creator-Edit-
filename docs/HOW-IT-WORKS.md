@@ -15,8 +15,9 @@ This is the reference for what each part of the program does and how it is built
 9. [Export](#export)
 10. [Limits](#limits)
 11. [Whole new building](#whole-new-building)
-12. [Controls](#controls)
-13. [Code map](#code-map)
+12. [The game's own interiors](#the-games-own-interiors)
+13. [Controls](#controls)
+14. [Code map](#code-map)
 
 ## Architecture
 
@@ -33,6 +34,7 @@ Because the UI is served from disk, a change in `ui\` only needs a reload of the
 - **Interior in an imported model.** Import the files of a building, cut openings, draw rooms, finish, export. This is the main workflow and is described below.
 - **Whole new building.** Build a house on a grid with walls, rooms, doors, windows, stairs, levels and a roof.
 - **Interior for an existing house (older).** Projects made with the early automatic mode still open and export as they did.
+- **The game's own interiors.** Copy a Rockstar interior (the casino, an apartment, an office...) to any place, or join several into one MLO. See [The game's own interiors](#the-games-own-interiors).
 
 ## Workflow for an interior in an imported model
 
@@ -182,6 +184,51 @@ Press Export on the Export tab; the folder goes to `output\<folder>` (or the fol
 
 Stand in the entrance doorway in the game and paste `vec4(x, y, z, heading)` to place the house.
 
+## The game's own interiors
+
+The game's interiors (the Diamond Casino, apartments, offices, garages, clubhouses...) are MLOs already: each is an MLO archetype in one of the game's `.ytyp` files, placed by a `.ymap` and tied to its collision by a manifest (`.ymf`). This project type copies them: **New project > The game's own interiors** opens a page of its own (`interiors.html`). A combination is saved as a project like the others (kind `combo`) and opens from the project list.
+
+### The list
+
+*Build the list* reads every `.ytyp`, `.ymap` and `.ymf` of your install once (a few minutes) and keeps the result in `cache\mlo_index.txt` and `cache\mlo_archetypes.txt`. *Rebuild the list* reads them again after a game update. For each interior it knows the type file and DLC pack that hold it, its rooms, portals and entity sets, where the game places it (and which entity sets it shows there), and its collision files.
+
+Most interiors are stored by number only (`hash_...`), so the list also shows the type file name (`vw_int_casino_main`), the map files that place it and the room names; the search matches all of them. Typing an interior's real name finds it and names it from then on (kept in `cache\mlo_names.txt`).
+
+### The plan
+
+- **Add** puts an interior on the plan: rooms as outlines, entities as dots, portals as lines (amber: a doorway to the outside, green: two pieces' doorways that the export joins, grey: between rooms of one piece).
+- **Drag** a piece to move it (5 cm steps, Alt for none). When one of its doorways comes within 0.8 m of another piece's doorway (parallel, a similar size) it snaps so they meet exactly; Shift places it freely. **R** turns it 90 degrees about its middle (Shift+R: 15), the arrow keys move it, Page Up / Page Down raise and lower it, Delete removes it. Ctrl+Z / Ctrl+Y undo and redo.
+- **Arrange as in the game** places every piece relative to the first the way the game places its own copies, which is how the casino floor, the penthouse and the garage fit together.
+- **Heights** shows only the rooms between two heights, to see one floor of a building with several.
+- **Entity sets**: tick the ones that should be on. They start as the game shows them at its own copy (*As in game*).
+- **Where it stands in the world**: x, y, z and heading of the joined interior, or paste a `vec4`. It starts where the game has the first piece; the page warns while a piece stands within 60 m of the game's own copy, since the two would overlap if the game's copy is loaded.
+
+### Export
+
+One resource, written to the output folder like the other exports:
+
+| File | Content |
+|---|---|
+| `<prefix>_types.ytyp` | One new MLO archetype: every piece's entities, rooms, portals, entity sets and timecycle modifiers, moved to where you put the piece. One limbo room for all of them; room and entity numbers are renumbered, duplicate room and set names get `_2`, `_3`... |
+| `<prefix>_mlo.ybn` | The game's collision of every piece in one file: each part keeps its geometry and gets the piece's move in its transform; the room each polygon belongs to is renumbered. Collision stored in world space is moved back into the interior first. |
+| `<prefix>_milo_.ymap` | The placement, with the ticked entity sets as its default sets |
+| `_manifest_<prefix>.ymf` | Ties the interior to its collision, and lists the game's own type files that define the models the entities use, so the game loads them with the interior |
+| `client/ipl.lua` | Loads the placement map, switches on the ticked entity sets that have a readable name, and (when ticked) loads the pieces' original map files |
+| `fxmanifest.lua`, `README.md` | The resource, the pieces, a test spot to teleport to, and the warnings |
+
+No model, texture or other game file is copied: the entities keep the game's model names and the game streams them itself. Interiors of a DLC need a server game build that has that DLC (`sv_enforceGameBuild`).
+
+**Joining doorways.** Pieces always share the outside (limbo), like separate interiors standing next to each other. With *Join doorways that meet* (on by default), a doorway of one piece that lies on a doorway of another (centres within 35 cm, parallel, area within a factor of 2) becomes one portal from room to room, so you see and walk straight through.
+
+### Limits of this project type
+
+- Everything has to be tested in the game: streaming, portals, lighting, collision, and which entity sets look right together.
+- The game's collision can name only 31 rooms. A joined interior with more rooms works, but the collision of the rooms after the 31st says "outside"; the export warns.
+- Interiors that the game's manifests list no collision for come without collision; the export warns.
+- Entity sets known only by number cannot be switched on by name from a script; they are still on by default when ticked.
+- Pieces that the game does not place itself (no map file) stay where you put them in *Arrange as in the game*.
+- Scripted parts of the game's interiors (the casino's games, lifts, doors that open by script) are not part of the interior and do not come with it.
+
 ## Controls
 
 **Camera:** middle-drag orbits (Shift pans, Ctrl zooms), right-drag also orbits, wheel zooms, keypad 1 / 3 / 7 for front / right / top (Ctrl for the opposite side), Home frames everything, WASD moves, Q / E turn 90 degrees, T is top-down.
@@ -200,9 +247,11 @@ Stand in the entrance doorway in the game and paste `vec4(x, y, z, heading)` to 
 | `src\ModelCut.cs`, `src\CollisionCut.cs` | Cutting the model and its collision |
 | `src\Vanilla.cs` | Reading the game's archives and map files |
 | `src\Exporter.cs`, `src\FitExport.cs` | Writing the resource, door and window props |
+| `src\Interiors.cs` | The game's own interiors: the list, one interior's rooms and portals, joining pieces into one MLO |
 | `src\GlbModels.cs` | Reading `.glb` models |
 | `ui\js\importmodel.js`, `importtools.js`, `importui.js` | The import workflow: model, tools, side panels |
 | `ui\js\plants.js` | Props and plants |
 | `ui\js\shell.js`, `mesher.js` | Building the interior's meshes and collision |
 | `ui\js\fitmodels.js` | Placing `.glb` models |
 | `ui\js\walk.js` | The walk check |
+| `ui\interiors.html`, `ui\js\interiors.js` | The game's own interiors: list, plan, export |

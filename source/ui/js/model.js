@@ -231,6 +231,8 @@ window.MLO = window.MLO || {};
         M.Errors.crumb('open project "' + name + '"');
         try { await saveThumb(true); } catch (e) { }                     // the project that is leaving, while its view is still on screen
         const p = await api('project?name=' + encodeURIComponent(name));
+        // the game's own interiors joined together: a page of their own
+        if (p && p.kind === 'combo') { if (!state.saved && state.project && state.project.name) { try { await save(); } catch (e) { } } location.href = 'interiors.html?name=' + encodeURIComponent(name); return new Promise(() => { }); }
         state.project = upgrade(p); state.project.name = name; state.level = 0; hist.undo.length = 0; hist.redo.length = 0; state.saved = true; state.dirty = false;
         state.shellSel = null; state.ref = null;
         if (state.project.kind === 'vanilla') await loadRef(name);

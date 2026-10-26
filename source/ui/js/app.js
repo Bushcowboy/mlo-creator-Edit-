@@ -160,6 +160,8 @@ window.MLO = window.MLO || {};
     // nothing is opened or created by itself: the start screen lists the projects (unless the user ticked "open the last project automatically")
     async function startProject() {
         let name = null, auto = false; try { name = localStorage.getItem('mlo.last'); auto = localStorage.getItem('mlo.autoopen') === '1'; } catch (e) { }
+        // (back from the game interiors page: show the project list rather than opening that combination again)
+        try { if (sessionStorage.getItem('mlo.noauto') === '1') { sessionStorage.removeItem('mlo.noauto'); auto = false; } } catch (e) { }
         if (auto && name) { try { await Model.openProject(name); return; } catch (e) { /* the last project is gone: show the start screen */ } }
         Model.state.project = Model.newProject('New House', 'grid'); bus.emit('project');          // an empty page behind the start screen, never saved
         UI.startDialog();

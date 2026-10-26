@@ -371,7 +371,7 @@ namespace MloCreator
             if (path == "/") path = "/index.html";
             string full = Path.GetFullPath(Path.Combine(UiDir, path.TrimStart('/').Replace('/', '\\')));
             if (!full.StartsWith(UiDir, StringComparison.OrdinalIgnoreCase) || !File.Exists(full)) { Reply(c, 404, "not found", "text/plain"); return; }
-            if (Path.GetFileName(full).Equals("index.html", StringComparison.OrdinalIgnoreCase))
+            if (Path.GetExtension(full).Equals(".html", StringComparison.OrdinalIgnoreCase))          // (every page gets the token: the editor and the interiors page)
             {
                 string html = File.ReadAllText(full, Encoding.UTF8).Replace("__TOKEN__", Token).Replace("__VERSION__", Version);
                 Reply(c, 200, html, "text/html; charset=utf-8");
@@ -549,7 +549,42 @@ namespace MloCreator
                 if (Directory.Exists(dir) && dir.StartsWith(outRoot, StringComparison.OrdinalIgnoreCase)) Process.Start("explorer.exe", "\"" + dir + "\"");
                 Reply(c, 200, "{\"ok\":true}", "application/json"); return;
             }
+            if (api.StartsWith("interiors/")) { HandleInteriors(c, api.Substring(10), method); return; }
             Reply(c, 404, "{\"ok\":false,\"error\":\"unknown api\"}", "application/json");
+        }
+
+        // the game's own interiors: build the list (in the background), search it, read one, export a copy or several joined into one
+        static void HandleInteriors(HttpListenerContext c, string api, string method)
+        {
+            try
+            {
+                if (api == "status")
+                {
+                    string st = Interiors.Status; if (string.IsNullOrEmpty(st)) st = Vanilla.Status;
+                    Reply(c, 200, Json.Serialize(new Dictionary<string, object> { { "ready", Interiors.Ready }, { "busy", Interiors.Busy }, { "status", st ?? "" }, { "error", Interiors.Error ?? "" }, { "gta", GtaDefault() }, { "cached", File.Exists(Path.Combine(Root, "cache", "mlo_index.txt")) } }), "application/json"); return;
+                }
+                if (api == "index" && method == "POST")
+                {
+                    Dictionary<string, object> body = Json.DeserializeObject(ReadBody(c)) as Dictionary<string, object>;
+                    string gta = J.S(J.G(body, "gta"), null); if (string.IsNullOrWhiteSpace(gta)) gta = GtaDefault();
+                    if (string.IsNullOrWhiteSpace(gta) || !File.Exists(Path.Combine(gta, "GTA5.exe"))) { Reply(c, 200, Json.Serialize(new Dictionary<string, object> { { "ok", false }, { "error", "GTA V was not found" + (string.IsNullOrWhiteSpace(gta) ? "" : " in \"" + gta + "\"") + ". Type the folder that holds GTA5.exe." } }), "application/json"); return; }
+                    Dictionary<string, object> st = Settings(); st["gtaPath"] = gta; File.WriteAllText(SettingsPath, Json.Serialize(st), Encoding.UTF8);
+                    Interiors.StartIndex(gta, Path.Combine(Root, "cache"), J.B(J.G(body, "force"), false));
+                    Reply(c, 200, "{\"ok\":true}", "application/json"); return;
+                }
+                if (api == "list") { int max = 300; int.TryParse(c.Request.QueryString["max"] ?? "", out max); if (max <= 0) max = 300; Reply(c, 200, Json.Serialize(Interiors.List(c.Request.QueryString["q"], Math.Min(max, 2000))), "application/json"); return; }
+                if (api == "detail") { Reply(c, 200, Json.Serialize(Interiors.Detail(c.Request.QueryString["name"])), "application/json"); return; }
+                if (api == "export" && method == "POST")
+                {
+                    Dictionary<string, object> spec = Json.DeserializeObject(ReadBody(c)) as Dictionary<string, object>;
+                    string outDir = J.S(J.G(spec, "outDir"), null); if (string.IsNullOrWhiteSpace(outDir)) outDir = (string)Settings()["outDir"];
+                    Dictionary<string, object> result;
+                    lock (ExportLock) { Directory.CreateDirectory(outDir); result = Interiors.Export(spec, outDir); }
+                    Reply(c, 200, Json.Serialize(result), "application/json"); return;
+                }
+                Reply(c, 404, "{\"ok\":false,\"error\":\"unknown api\"}", "application/json");
+            }
+            catch (Exception ex) { Reply(c, 200, Json.Serialize(new Dictionary<string, object> { { "ok", false }, { "error", ex.Message } }), "application/json"); }
         }
     }
 }

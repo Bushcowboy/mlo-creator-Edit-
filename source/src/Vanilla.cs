@@ -40,6 +40,9 @@ namespace MloCreator
         static readonly object gate = new object();
         public static bool Ready { get { return rpf != null; } }
         public static string GtaPath { get { return gta; } }
+        public static RpfManager Manager { get { return rpf; } }          // (Interiors reads every archive's manifests, which share one file name)
+        public static string CacheDir { get { return cache; } }
+        public static int EntryCount { get { return ent.Count; } }
 
         public static void Init(string gtaPath, string cacheDir)
         {
