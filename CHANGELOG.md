@@ -2,6 +2,14 @@
 
 Changes on the `feature/game-interiors` branch, newest first. Each entry says how it was tested. "Not tested in game" means it compiles and passes the checks listed, but nobody has loaded it in GTA V / FiveM yet: report what breaks and the next push fixes it.
 
+## 2026-10-26 (4) — Wall colour schemes as entity sets
+
+- Paint tab, *Wall colours (entity sets)*: add colour schemes; in each, swap any texture used inside (pick a texture in the bench, then *Use picked*). *Show* previews a scheme in the 3D view.
+- On export, every surface whose texture a scheme swaps leaves the interior's always-there model and goes into one model per scheme (`<prefix>_pnt0.ydr` = the colours as painted, `_pnt1`, `_pnt2`...). Each is an entity set of the MLO named `<prefix>_paint_<scheme>`, e.g. `bushcowboy_casino_paint_navy`. The default set (`<prefix>_paint_default`, renameable) is on by default in the placement map; switching is left to your script. The README lists the sets with an `ActivateInteriorEntitySet` example.
+- Surfaces no scheme touches stay in the interior model. Textures repeat at their own size in each scheme. A scheme that swaps nothing is not exported.
+- Smoother normal maps for wallpaper and brushed metal.
+- Tested: an editor-built export with two schemes, read back with CodeWalker: 3 entity sets with one part each in room 1, the always-there part as the only MLO entity, the swapped textures in the scheme models, only the default set on in the ymap, README section; browser checks of the panel. **Not tested in game**: switching the sets live.
+
 ## 2026-10-26 (3) — Normal and specular maps, 24 new materials
 
 - Every texture is exported with a normal map (`<name>_n`) and a specular map (`<name>_s`) and uses the game's `normal_spec` shader, with per-vertex tangents worked out from the UVs. Mortar, grout, plank gaps and panel joints are sunk in; tiles, marble and metal shine, plaster and carpet stay matt. Each kind of surface has its own bumpiness and shine.

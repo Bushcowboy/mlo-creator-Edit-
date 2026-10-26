@@ -125,6 +125,13 @@ window.MLO = window.MLO || {};
         o.variants = Array.isArray(l.variants) ? l.variants : []; return o;
     }
 
+    // the entity sets the colour schemes become: [{ name, variant }] (variant null = the colours as painted); only schemes that swap something count
+    function colourSets(l) {
+        l = mergeLook(l); const vars = l.variants.filter(v => v && v.swap && Object.keys(v.swap).some(k => v.swap[k] && v.swap[k] !== k)); if (!vars.length) return [];
+        const used = new Set(), slug = (t) => (t || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 14) || 'v', uniq = (n) => { let c = n, k = 2; while (used.has(c)) c = n + k++; used.add(c); return c; };
+        return [{ name: uniq('paint_' + slug(l.defaultName || 'default')), variant: null }].concat(vars.map(v => ({ name: uniq('paint_' + slug(v.name)), variant: v })));
+    }
+
     function newProject(name, kind) {
         const p = {
             version: 1, kind: kind === 'vanilla' ? 'vanilla' : (kind === 'import' ? 'import' : 'grid'), name: name || 'New House', prefix: 'mlo' + randId(),
@@ -355,7 +362,7 @@ window.MLO = window.MLO || {};
         return { prefix: base, resource: base, auto: true };
     }
 
-    M.Model = { defaultLook, mergeLook, loadSettings, setDeveloper, getDeveloper, exportNames, bldAll, switchBuilding, addBuilding, renameBuilding, deleteBuilding, withBuilding, state, bus, api, apiRaw, saveAs, touch, edit, undo, redo, save, listProjects, openProject, createProject, renameProject, renameAny, duplicate, deleteProject, saveThumb, openedAt, cur, ensureLevels, ops, newLevel, newProject, upgrade, hist, loadRef, saveRef, safeName };
+    M.Model = { colourSets, defaultLook, mergeLook, loadSettings, setDeveloper, getDeveloper, exportNames, bldAll, switchBuilding, addBuilding, renameBuilding, deleteBuilding, withBuilding, state, bus, api, apiRaw, saveAs, touch, edit, undo, redo, save, listProjects, openProject, createProject, renameProject, renameAny, duplicate, deleteProject, saveThumb, openedAt, cur, ensureLevels, ops, newLevel, newProject, upgrade, hist, loadRef, saveRef, safeName };
 })(window.MLO);
 
 

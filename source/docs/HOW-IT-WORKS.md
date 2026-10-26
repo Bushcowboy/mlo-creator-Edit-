@@ -54,6 +54,10 @@ The Build tab shows a route of nine stages that open like dropdowns; a card abov
 
 Every texture is a pattern made by the program (or a photo, or an image you add). On export each one becomes three textures: the colour, a normal map (`_n`, the bumps: mortar, grout and plank gaps are sunk in) and a specular map (`_s`, what shines: the faces of tiles more than their grout). Surfaces use the game's `normal_spec` shader, with a bumpiness and shine for each kind of material (marble and tile shine, plaster and carpet are matt). The Paint tab has *Normal and specular maps* (untick for flat textures and smaller files) and *Flip the green channel* (tick it if bumps look raised instead of sunk in the game). The 3D view shows the colour only.
 
+### Wall colours (entity sets)
+
+The Paint tab's *Wall colours* makes colour schemes for the inside. A scheme swaps textures: everything painted Cream Plaster becomes Navy Diamond Paper, say, and the oak floor becomes walnut. *Show* puts a scheme in the view. On export, the surfaces that any scheme swaps are taken out of the interior model and written once per scheme (`<prefix>_pnt0.ydr` with the colours as painted, `_pnt1`... for the schemes); each becomes an entity set of the MLO called `<prefix>_paint_<name>`. The default one is on when the interior loads; a script switches with `DeactivateInteriorEntitySet` / `ActivateInteriorEntitySet` and `RefreshInterior` (the exported README has the names and an example). Keep one colour set on at a time.
+
 ### Room settings
 
 - **Ceiling height** and **wall depth** are in the right panel. *Match the building* picks the ceiling top that most of the building's own wall area has.
@@ -150,6 +154,7 @@ Press Export on the Export tab; the folder goes to `output\<folder>` (or the fol
 |---|---|
 | `<prefix>_int.ydr` | The interior: floors, walls, ceiling, trim, lights (`<prefix>` is `developer_project`, see Names above) |
 | `<prefix>_glass.ydr` | Window glass |
+| `<prefix>_pnt0.ydr`, `_pnt1.ydr`... | The surfaces the colour schemes swap, once per scheme (entity sets `<prefix>_paint_...`) |
 | `<prefix>_mlo.ybn` | Collision for floors, walls and your boxes |
 | `<prefix>_tex.ytd` | Only the textures you used |
 | `<prefix>_types.ytyp` | The MLO: limbo room + interior room, one portal for each door or window that reaches the outside, and the door props |

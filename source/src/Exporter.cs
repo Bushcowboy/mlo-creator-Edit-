@@ -26,7 +26,7 @@ namespace MloCreator
     class LightData { public double X, Y, Z; public int R, G, B; public double Intensity, Falloff, Exponent; }
     class GroupData
     {
-        public string Name; public int Room, Flags; public double Lod;
+        public string Name, Set; public int Room, Flags; public double Lod;          // Set: the entity set this part belongs to (wall colour variants), null = always there
         public List<MatData> Mats = new List<MatData>(); public List<LightData> Lights = new List<LightData>();
     }
     class PortalData { public int Flags; public double[] C; }
@@ -336,7 +336,9 @@ namespace MloCreator
             s.AppendLine("  <Item type=\"CMloArchetypeDef\">\n   <lodDist value=\"300\" />\n   <flags value=\"0\" />\n   <specialAttribute value=\"0\" />");
             s.AppendLine("   " + Vec("bbMin", bmn) + "\n   " + Vec("bbMax", bmx) + "\n   " + Vec("bsCentre", bc) + "\n   <bsRadius value=\"" + F(br) + "\" />\n   <hdTextureDist value=\"100\" />");
             s.AppendLine("   <name>" + mlo + "</name>\n   <textureDictionary />\n   <clipDictionary />\n   <drawableDictionary />\n   <physicsDictionary>" + mlo + "</physicsDictionary>\n   <assetType>ASSET_TYPE_ASSETLESS</assetType>\n   <assetName>" + mlo + "</assetName>\n   <extensions />\n   <mloFlags value=\"0\" />\n   <entities>");
-            foreach (GroupData g in groups) s.Append(EntityXml(P + g.Name, g.Flags, g.Lod));
+            // the parts that are always there are the MLO's entities; the wall colour variants are entity sets (one part each, switched on and off by name)
+            List<GroupData> main = groups.FindAll(delegate (GroupData q) { return q.Set == null; });
+            foreach (GroupData g in main) s.Append(EntityXml(P + g.Name, g.Flags, g.Lod));
             foreach (DoorData d in doors) s.Append(PropEntityXml(d.Name, d.X, d.Y, d.Z, d.Heading, d.ScaleXY, d.ScaleZ));
             s.AppendLine("   </entities>");
             s.AppendLine("   <rooms itemType=\"CMloRoomDef\">");
@@ -344,8 +346,8 @@ namespace MloCreator
             for (int room = 0; room < 2; room++)
             {
                 List<string> att = new List<string>();
-                for (int i = 0; i < groups.Count; i++) if (groups[i].Room == room) att.Add(i.ToString());
-                if (room == 1) for (int i = 0; i < doors.Count; i++) att.Add((groups.Count + i).ToString());
+                for (int i = 0; i < main.Count; i++) if (main[i].Room == room) att.Add(i.ToString());
+                if (room == 1) for (int i = 0; i < doors.Count; i++) att.Add((main.Count + i).ToString());
                 string name = room == 0 ? "limbo" : mlo;
                 s.AppendLine("    <Item>\n     <name>" + name + "</name>\n     " + rb + "\n     <blend value=\"1\" />\n     <timecycleName>" + timecycle + "</timecycleName>\n     <secondaryTimecycleName />\n     <flags value=\"96\" />\n     <portalCount value=\"" + portals.Count + "\" />\n     <floorId value=\"0\" />\n     <exteriorVisibiltyDepth value=\"-1\" />\n     <attachedObjects>" + string.Join(" ", att.ToArray()) + "</attachedObjects>\n    </Item>");
             }
@@ -356,17 +358,36 @@ namespace MloCreator
                 for (int k = 0; k < 4; k++) s.AppendLine("      <Item>" + F(p.C[k * 3]) + ", " + F(p.C[k * 3 + 1]) + ", " + F(p.C[k * 3 + 2]) + ", 0</Item>");
                 s.AppendLine("     </corners>\n     <attachedObjects />\n    </Item>");
             }
-            s.AppendLine("   </portals>\n   <entitySets itemType=\"CMloEntitySet\" />\n   <timeCycleModifiers itemType=\"CMloTimeCycleModifier\" />\n  </Item>");
+            s.AppendLine("   </portals>");
+            List<string> setNames = new List<string>(); foreach (GroupData g in groups) if (g.Set != null && !setNames.Contains(g.Set)) setNames.Add(g.Set);
+            if (setNames.Count == 0) s.AppendLine("   <entitySets itemType=\"CMloEntitySet\" />");
+            else
+            {
+                s.AppendLine("   <entitySets itemType=\"CMloEntitySet\">");
+                foreach (string sn in setNames)
+                {
+                    List<GroupData> parts = groups.FindAll(delegate (GroupData q) { return q.Set == sn; }); List<string> locs = new List<string>();
+                    foreach (GroupData g in parts) locs.Add(g.Room.ToString());
+                    s.AppendLine("    <Item>\n     <name>" + P + sn + "</name>\n     <locations>" + string.Join(" ", locs.ToArray()) + "</locations>\n     <entities>");
+                    foreach (GroupData g in parts) s.Append(EntityXml(P + g.Name, g.Flags, g.Lod).Replace("\n    ", "\n      ").Replace("    <Item type", "      <Item type"));
+                    s.AppendLine("     </entities>\n    </Item>");
+                }
+                s.AppendLine("   </entitySets>");
+            }
+            s.AppendLine("   <timeCycleModifiers itemType=\"CMloTimeCycleModifier\" />\n  </Item>");
             s.AppendLine(" </archetypes>\n <name>" + P + "types</name>\n <dependencies />\n <compositeEntityTypes itemType=\"CCompositeEntityType\" />\n</CMapTypes>");
             return s.ToString();
         }
 
-        static string YmapXml(string mapName, string mlo, double px, double py, double pz, double qz, double qw, V3 emn, V3 emx)
+        static string YmapXml(string mapName, string mlo, double px, double py, double pz, double qz, double qw, V3 emn, V3 emx) { return YmapXml(mapName, mlo, px, py, pz, qz, qw, emn, emx, null); }
+        static string YmapXml(string mapName, string mlo, double px, double py, double pz, double qz, double qw, V3 emn, V3 emx, List<string> sets)
         {
+            string ds = "<defaultEntitySets />";
+            if (sets != null && sets.Count > 0) { StringBuilder b = new StringBuilder("<defaultEntitySets>"); foreach (string n in sets) b.Append("\n    <Item>" + n + "</Item>"); ds = b.Append("\n   </defaultEntitySets>").ToString(); }
             string sext = "<streamingExtentsMin x=\"" + F(emn.X - 300) + "\" y=\"" + F(emn.Y - 300) + "\" z=\"" + F(emn.Z - 300) + "\" />\n <streamingExtentsMax x=\"" + F(emx.X + 300) + "\" y=\"" + F(emx.Y + 300) + "\" z=\"" + F(emx.Z + 300) + "\" />";
             string ext = "<entitiesExtentsMin x=\"" + F(emn.X) + "\" y=\"" + F(emn.Y) + "\" z=\"" + F(emn.Z) + "\" />\n <entitiesExtentsMax x=\"" + F(emx.X) + "\" y=\"" + F(emx.Y) + "\" z=\"" + F(emx.Z) + "\" />";
             return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CMapData>\n <name>" + mapName + "</name>\n <parent />\n <flags value=\"1\" />\n <contentFlags value=\"9\" />\n " + sext + "\n " + ext +
-                "\n <entities>\n  <Item type=\"CMloInstanceDef\">\n   <archetypeName>" + mlo + "</archetypeName>\n   <flags value=\"32\" />\n   <guid value=\"0\" />\n   <position x=\"" + F(px) + "\" y=\"" + F(py) + "\" z=\"" + F(pz) + "\" />\n   <rotation x=\"0\" y=\"0\" z=\"" + F(qz) + "\" w=\"" + F(qw) + "\" />\n   <scaleXY value=\"1\" />\n   <scaleZ value=\"1\" />\n   <parentIndex value=\"-1\" />\n   <lodDist value=\"300\" />\n   <childLodDist value=\"0\" />\n   <lodLevel>LODTYPES_DEPTH_ORPHANHD</lodLevel>\n   <numChildren value=\"0\" />\n   <priorityLevel>PRI_REQUIRED</priorityLevel>\n   <extensions />\n   <ambientOcclusionMultiplier value=\"255\" />\n   <artificialAmbientOcclusion value=\"255\" />\n   <tintValue value=\"0\" />\n   <groupId value=\"0\" />\n   <floorId value=\"0\" />\n   <defaultEntitySets />\n   <numExitPortals value=\"0\" />\n   <MLOInstflags value=\"0\" />\n  </Item>\n </entities>\n" +
+                "\n <entities>\n  <Item type=\"CMloInstanceDef\">\n   <archetypeName>" + mlo + "</archetypeName>\n   <flags value=\"32\" />\n   <guid value=\"0\" />\n   <position x=\"" + F(px) + "\" y=\"" + F(py) + "\" z=\"" + F(pz) + "\" />\n   <rotation x=\"0\" y=\"0\" z=\"" + F(qz) + "\" w=\"" + F(qw) + "\" />\n   <scaleXY value=\"1\" />\n   <scaleZ value=\"1\" />\n   <parentIndex value=\"-1\" />\n   <lodDist value=\"300\" />\n   <childLodDist value=\"0\" />\n   <lodLevel>LODTYPES_DEPTH_ORPHANHD</lodLevel>\n   <numChildren value=\"0\" />\n   <priorityLevel>PRI_REQUIRED</priorityLevel>\n   <extensions />\n   <ambientOcclusionMultiplier value=\"255\" />\n   <artificialAmbientOcclusion value=\"255\" />\n   <tintValue value=\"0\" />\n   <groupId value=\"0\" />\n   <floorId value=\"0\" />\n   " + ds + "\n   <numExitPortals value=\"0\" />\n   <MLOInstflags value=\"0\" />\n  </Item>\n </entities>\n" +
                 " <containerLods itemType=\"rage__fwContainerLodDef\" />\n <boxOccluders itemType=\"BoxOccluder\" />\n <occludeModels itemType=\"OccludeModel\" />\n <physicsDictionaries />\n <instancedData>\n  <ImapLink />\n  <PropInstanceList itemType=\"rage__fwPropInstanceListDef\" />\n  <GrassInstanceList itemType=\"rage__fwGrassInstanceListDef\" />\n </instancedData>\n <timeCycleModifiers itemType=\"CTimeCycleModifier\" />\n <carGenerators itemType=\"CCarGen\" />\n <LODLightsSOA>\n  <direction itemType=\"FloatXYZ\" />\n  <falloff />\n  <falloffExponent />\n  <timeAndStateFlags />\n  <hash />\n  <coneInnerAngle />\n  <coneOuterAngleOrCapExt />\n  <coronaIntensity />\n </LODLightsSOA>\n <DistantLODLightsSOA>\n  <position itemType=\"FloatXYZ\" />\n  <RGBI />\n  <numStreetLights value=\"0\" />\n  <category value=\"0\" />\n </DistantLODLightsSOA>\n <block>\n  <version value=\"0\" />\n  <flags value=\"0\" />\n  <name>" + mapName + "</name>\n  <exportedBy>MLO Creator</exportedBy>\n  <owner></owner>\n  <time>" + DateTime.Now.ToString("d MMMM yyyy HH:mm", CultureInfo.InvariantCulture) + "</time>\n </block>\n</CMapData>\n";
         }
 
@@ -399,7 +420,7 @@ namespace MloCreator
             File.WriteAllText(path, text.Replace("\r\n", "\n"), new UTF8Encoding(false));
         }
 
-        class InteriorInfo { public List<string> DoorLines = new List<string>(); public List<string> Credits = new List<string>(); public string P, Label, Mlo, EntranceNote, DoorName; public double X, Y, Z, Heading; public int Doors; }
+        class InteriorInfo { public List<string> Sets = new List<string>(); public string DefaultSet; public List<string> DoorLines = new List<string>(); public List<string> Credits = new List<string>(); public string P, Label, Mlo, EntranceNote, DoorName; public double X, Y, Z, Heading; public int Doors; }
 
         // ---------- one interior (one building): meshes, collision, portals, doors, textures, ytyp, ymap and manifest go into the stream folder ----------
         static InteriorInfo WriteInterior(Dictionary<string, object> model, string outRoot, string stream, string work, List<string> log, List<string> files, List<string> warns, List<string> patchedFiles, ref long total, ref bool doorShipped)
@@ -419,6 +440,7 @@ namespace MloCreator
                     GroupData g = new GroupData();
                     g.Name = Safe(J.S(J.G(gd, "name"), "part"), "part", 12);
                     g.Room = J.I(J.G(gd, "room"), 1); g.Flags = J.I(J.G(gd, "flags"), 1572864); g.Lod = J.D(J.G(gd, "lod"), 300);
+                    string gset = J.S(J.G(gd, "set"), null); if (!string.IsNullOrEmpty(gset)) g.Set = Safe(gset, "paint", 24);
                     foreach (object mo in J.A(J.G(gd, "mats")))
                     {
                         Dictionary<string, object> md = J.O(mo);
@@ -582,7 +604,10 @@ namespace MloCreator
                 total += Save(Path.Combine(stream, P + "types.ytyp"), XmlMeta.GetRSCData(ytypDoc), files);
                 log.Add("portals: " + portals.Count);
 
-                XmlDocument ymapDoc = new XmlDocument(); ymapDoc.LoadXml(YmapXml(P + "milo_", mlo, px, py, pz, qz, qw, emn, emx));
+                // the default colours are on by default (the set marked default by the editor); the others wait for a script
+                List<string> onSets = new List<string>(); string defSet = J.S(J.G(model, "defaultSet"), null);
+                if (!string.IsNullOrEmpty(defSet)) onSets.Add(P + Safe(defSet, "paint", 24));
+                XmlDocument ymapDoc = new XmlDocument(); ymapDoc.LoadXml(YmapXml(P + "milo_", mlo, px, py, pz, qz, qw, emn, emx, onSets));
                 total += Save(Path.Combine(stream, P + "milo_.ymap"), XmlMeta.GetRSCData(ymapDoc), files);
 
                 XmlDocument mfDoc = new XmlDocument(); mfDoc.LoadXml(ManifestXml(P, mlo));
@@ -608,7 +633,7 @@ namespace MloCreator
                     foreach (string w2 in (List<string>)pr["warnings"]) warns.Add(w2);
                 }
 
-                InteriorInfo info = new InteriorInfo(); info.P = P; info.Label = label; info.Mlo = mlo; info.X = px; info.Y = py; info.Z = pz; info.Heading = hd; info.Doors = doors.Count; info.DoorName = doorName; info.EntranceNote = J.S(J.G(model, "entranceNote"), "none set"); info.Credits = fit.Credits; info.DoorLines = doorLines;
+                InteriorInfo info = new InteriorInfo(); foreach (GroupData g in groups) if (g.Set != null && !info.Sets.Contains(P + g.Set)) info.Sets.Add(P + g.Set); info.DefaultSet = onSets.Count > 0 ? onSets[0] : null; info.P = P; info.Label = label; info.Mlo = mlo; info.X = px; info.Y = py; info.Z = pz; info.Heading = hd; info.Doors = doors.Count; info.DoorName = doorName; info.EntranceNote = J.S(J.G(model, "entranceNote"), "none set"); info.Credits = fit.Credits; info.DoorLines = doorLines;
                 return info;
             }
         }
@@ -686,6 +711,8 @@ namespace MloCreator
                 foreach (InteriorInfo ii in infos) rd.Append("- **" + ii.Label + "** (`" + ii.P + "...`): world position of the origin " + F(ii.X) + ", " + F(ii.Y) + ", " + F(ii.Z) + "  heading " + F(ii.Heading) + ". Entrance / test spot: " + ii.EntranceNote + (ii.Doors > 0 ? ". " + ii.Doors + " door(s) placed with `" + ii.DoorName + "` as static props (add them to your door script, for example ox_doorlock, by model and coordinates if they should open)" : ". Doors are open doorways: add a door script/prop of your choice") + "\n");
                 { List<string> cr = new List<string>(); foreach (InteriorInfo ii in infos) foreach (string c1 in ii.Credits) if (!cr.Contains(c1)) cr.Add(c1); if (cr.Count > 0) rd.Append("\n## Models used\n\nWindow and door models made by other people (check each licence before you use this resource on a server):\n\n- " + string.Join("\n- ", cr.ToArray()) + "\n"); }
                 { List<string> dls = new List<string>(); foreach (InteriorInfo ii in infos) foreach (string d1 in ii.DoorLines) dls.Add(d1); if (dls.Count > 0) rd.Append("\n## Doors you placed (for your door script)\n\nThese doors are props of their own with the same object flags and a box collision like the game's own doors, so a door script (ox_doorlock, the game's door system...) can find and swing them. Give the script the model and the hinge position:\n\n- " + string.Join("\n- ", dls.ToArray()) + "\n"); }
+                { List<string> sl = new List<string>(); InteriorInfo first = null; foreach (InteriorInfo ii in infos) foreach (string sn in ii.Sets) { sl.Add("`" + sn + "`" + (sn == ii.DefaultSet ? " (on by default)" : "")); if (first == null) first = ii; }
+                  if (sl.Count > 0) rd.Append("\n## Wall colours (entity sets)\n\nEach colour scheme is an entity set of the interior; the one marked default is on when the interior loads. Switch them from your own script, for example:\n\n```lua\nlocal id = GetInteriorAtCoords(" + F(Math.Round(first.X, 2)) + ", " + F(Math.Round(first.Y, 2)) + ", " + F(Math.Round(first.Z + 1, 2)) + ")\nDeactivateInteriorEntitySet(id, '" + (first.DefaultSet ?? first.Sets[0]) + "')\nActivateInteriorEntitySet(id, '" + first.Sets[first.Sets.Count - 1] + "')\nRefreshInterior(id)\n```\n\nOnly one colour set should be on at a time (two would draw the same walls twice).\n\n- " + string.Join("\n- ", sl.ToArray()) + "\n"); }
                 if (plantNames.Count > 0) rd.Append("\n## Props and plants hidden\n\nThe game's map places bushes, trees, weeds and other props (bins, boxes, fences...) as objects of their own. These were taken out in the editor (they stand inside the rooms or in front of the windows and doors, or were picked by hand). `client/plants.lua` hides each one (`CreateModelHide`, a 0.6 m radius around the spot, so the same model elsewhere stays). No map file is replaced. Delete the line of a plant in that file to get it back:\n\n- " + string.Join("\n- ", plantNames.ToArray()) + "\n");
                 if (patchedFiles.Count > 0) rd.Append("\n## Game files this resource replaces\n\nThese files in stream/ are the game's own files with the openings you cut (model triangles, collision polygons, occluders) taken out; everything else is unchanged. Only one copy of a file with a given name can load: if another resource on your server ships a file with the same name, they conflict. Delete a file here and that cut goes away.\n\n- " + string.Join("\n- ", patchedFiles.ToArray()) + "\n");
                 WriteText(Path.Combine(dir, "README.md"), rd.ToString());

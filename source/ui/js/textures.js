@@ -131,7 +131,7 @@ window.MLO = window.MLO || {};
         },
         // wallpaper: stripes or a diamond print over a paper grain
         paper(u, v, p) {
-            const g = vnoise(u * SIZE, v * SIZE, SIZE, 19), k = 1 + (g - 0.5) * 0.03; let c = p.base, h = 0.5 + (g - 0.5) * 0.3;
+            const g = vnoise(u * SIZE, v * SIZE, SIZE, 19), k = 1 + (g - 0.5) * 0.03; let c = p.base, h = 0.5 + (vnoise(u * 40, v * 40, 40, 21) - 0.5) * 0.2;
             if (p.stripes) { const s = (u * p.stripes) % 1; if (s < p.width) { c = p.b; h += 0.05; } }
             else { const m = p.n || 6, du = Math.abs(((u * m) % 1) - 0.5), dv = Math.abs(((v * m) % 1) - 0.5); if (du + dv < 0.32 && du + dv > 0.22) { c = p.b; h += 0.06; } if (du + dv < 0.08) c = p.b; }
             return [c[0] * k, c[1] * k, c[2] * k, h];
@@ -145,7 +145,7 @@ window.MLO = window.MLO || {};
         // brushed metal: fine streaks one way
         brushed(u, v, p) {
             const s = vnoise(u * 3, v * SIZE, SIZE, 27), s2 = vnoise(u * 9, v * SIZE / 2, SIZE / 2, 29), k = 0.93 + (s - 0.5) * 0.14 + (s2 - 0.5) * 0.06;
-            return [p.base[0] * k, p.base[1] * k, p.base[2] * k, 0.5 + (s - 0.5) * 0.25];
+            return [p.base[0] * k, p.base[1] * k, p.base[2] * k, 0.5 + (vnoise(u * 3, v * 64, 64, 31) - 0.5) * 0.25];
         },
         // wainscot / beadboard: vertical boards with grooves
         bead(u, v, p) {

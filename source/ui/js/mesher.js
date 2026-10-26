@@ -397,17 +397,28 @@ window.MLO = window.MLO || {};
             glass: { name: 'glass', room: 1, flags: 32, lod: 200, mats: [], lights: [] }
         };
         const cur = new Map(), usedTex = new Set();
-        built.batches.forEach(b => {
-            const g = groups[b.group]; if (!g) return;
-            const key = b.group + '|' + b.tex + '|' + b.glass; let m = cur.get(key);
+        const add = (gk, b, tex, uvk) => {
+            const g = groups[gk]; if (!g) return;
+            const key = gk + '|' + tex + '|' + b.glass; let m = cur.get(key);
             const nv = b.pos.length / 3;
-            if (!m || m.pos.length / 3 + nv > MAXV) { m = { tex: b.tex, glass: b.glass, pos: [], nrm: [], uv: [], idx: [] }; cur.set(key, m); g.mats.push(m); }
+            if (!m || m.pos.length / 3 + nv > MAXV) { m = { tex, glass: b.glass, pos: [], nrm: [], uv: [], idx: [] }; cur.set(key, m); g.mats.push(m); }
             const off = m.pos.length / 3;
             for (let i = 0; i < b.pos.length; i++) m.pos.push(b.pos[i]);
             for (let i = 0; i < b.nrm.length; i++) m.nrm.push(b.nrm[i]);
-            for (let i = 0; i < b.uv.length; i++) m.uv.push(b.uv[i]);
+            for (let i = 0; i < b.uv.length; i++) m.uv.push(b.uv[i] * uvk);
             for (let i = 0; i < b.idx.length; i++) m.idx.push(b.idx[i] + off);
-            if (!b.glass) usedTex.add(b.tex);
+            if (!b.glass) usedTex.add(tex);
+        };
+        // wall colour variants: every surface whose texture a variant swaps leaves the always-there part and goes into one part per variant
+        // (the default colours too); each such part is an entity set of the interior, switched by name in the game
+        const cs = (M.Model && M.Model.colourSets) ? M.Model.colourSets(project.look) : [], vars = cs.slice(1).map(c => c.variant), setNames = cs.map(c => c.name);
+        const swapped = new Set(); vars.forEach(v => Object.keys(v.swap).forEach(k => { if (v.swap[k] && v.swap[k] !== k) swapped.add(k); }));
+        cs.forEach((c, i) => { groups['pnt' + i] = { name: 'pnt' + i, room: 1, flags: 1572864, lod: 300, mats: [], lights: [], set: c.name }; });
+        built.batches.forEach(b => {
+            if (vars.length && b.group === 'int' && !b.glass && swapped.has(b.tex)) {
+                add('pnt0', b, b.tex, 1);
+                vars.forEach((v, i) => { const t = v.swap[b.tex] && TEX.byId[v.swap[b.tex]] ? v.swap[b.tex] : b.tex; add('pnt' + (i + 1), b, t, TEX.tile(b.tex) / TEX.tile(t)); });       // (the new texture repeats at its own size)
+            } else add(b.group, b, b.tex, 1);
         });
         const L = extra.light || {};
         groups.int.lights = built.lights.slice(0, 48).map(l => ({ x: l.x, y: l.y, z: l.z, r: 255, g: 238, b: 210, intensity: L.intensity || 4, falloff: L.falloff || 6, exponent: L.exponent || 24 }));
@@ -443,7 +454,7 @@ window.MLO = window.MLO || {};
         return Object.assign({
             groups: outGroups,
             collision: { mats: built.matList, verts: M.toB64(new Float32Array(verts)), tris: M.toB64(new Int32Array(tris)) },
-            portals: built.portals, textures
+            portals: built.portals, textures, defaultSet: setNames.length ? setNames[0] : undefined, colourSets: setNames
         }, extra.model || {});
     }
 

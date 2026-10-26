@@ -87,7 +87,7 @@ window.MLO = window.MLO || {};
         });
     };
     Renderer.prototype.setBatches = function (batches) {
-        const gl = this.gl;
+        const gl = this.gl; if (M.Look && M.Look.preview) batches = M.Look.preview(batches);          // (a wall colour scheme shown in the view)
         this.bufs.forEach(b => { gl.deleteBuffer(b.vb); gl.deleteBuffer(b.ib); });
         this.bufs = this.makeBufs(batches);
     };
