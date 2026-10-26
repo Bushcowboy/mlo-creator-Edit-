@@ -451,6 +451,9 @@ window.MLO = window.MLO || {};
             const quad = (a, b2, c, d) => { tris.push(v + a, v + b2, v + c, mi, v + c, v + d, v + a, mi); };
             quad(1, 2, 6, 5); quad(3, 0, 4, 7); quad(2, 3, 7, 6); quad(0, 1, 5, 4); quad(4, 5, 6, 7); quad(3, 2, 1, 0);
         });
+        // collision triangles (sloped ceilings, gable ends): three corners and a material each
+        const ct = built.colTris || [];
+        for (let i = 0; i + 9 < ct.length; i += 10) { const v = verts.length / 3; verts.push(ct[i], ct[i + 1], ct[i + 2], ct[i + 3], ct[i + 4], ct[i + 5], ct[i + 6], ct[i + 7], ct[i + 8]); tris.push(v, v + 1, v + 2, ct[i + 9]); }
         const textures = [];
         [...usedTex].forEach(id => {
             const t = TEX.pixels(id), b64 = (a) => M.toB64(new Uint8Array(a.buffer, a.byteOffset, a.byteLength));

@@ -51,6 +51,11 @@ The Build tab shows a route of nine stages that open like dropdowns; a card abov
 8. **Check it.** The checklist and the walk check.
 9. **Export.**
 
+### Ceilings, columns and beams
+
+- **A room's ceiling** (select the room): flat, vaulted (gable), barrel, tray or shed, with its rise, the direction of the ridge and a texture; and beams across, along or both ways (under a vault they follow it as ribs, rafters and purlins). The gable ends close the space above the walls, and the sloped ceiling gets collision. The building's roof has to be higher than the vault.
+- **Column** (8): click the floor; square or round, with a base and capital, up to the ceiling above it (also under a vault). **Beam** (9): click its start and its end; straight or 45° (Shift: any angle), its top at the ceiling or at a height you give; low beams get collision. Both are listed in their tool panels with their settings; Alt+click (beams) or a second click (columns) or the Eraser removes them.
+
 ### Materials in the game
 
 Every texture is a pattern made by the program (or a photo, or an image you add). On export each one becomes three textures: the colour, a normal map (`_n`, the bumps: mortar, grout and plank gaps are sunk in) and a specular map (`_s`, what shines: the faces of tiles more than their grout). Surfaces use the game's `normal_spec` shader, with a bumpiness and shine for each kind of material (marble and tile shine, plaster and carpet are matt). The Paint tab has *Normal and specular maps* (untick for flat textures and smaller files) and *Flip the green channel* (tick it if bumps look raised instead of sunk in the game). The 3D view shows the colour only.
@@ -91,6 +96,7 @@ The *Timecycle* section of the Paint tab sets how the game lights and grades the
 | Collision box | Draw your own collision boxes |
 | Props and plants | Pick and remove map props, plants and small pieces |
 | Floor paint, Light | Finish the inside |
+| Column, Beam | Columns from floor to ceiling, beams under it |
 | Walk check | Walk a player-sized capsule through the result |
 | Scale figure | A 1.8 m figure to judge heights against |
 | Cutaway | Hide the model above a height to see inside |
@@ -180,7 +186,7 @@ Press Export on the Export tab; the folder goes to `output\<folder>` (or the fol
 
 - Never assume it works in game without testing. Streaming, lighting, portals, collision and door behaviour have to be seen in the game.
 - Only one resource can replace a given game file.
-- Rooms are axis-aligned rectangles in the grid, one level, one interior room for the whole interior.
+- Rooms are axis-aligned rectangles in the grid, one level, one interior room for the whole interior. A shaped ceiling covers its room's whole rectangle.
 - A cutter opens the interior walls only when it is square to the grid (within 1.5 degrees); the model and the collision are cut at any angle.
 - Spheres, capsules and cylinders of the collision are not clipped.
 - Collision boxes you draw are boxes only and are not checked against anything.
@@ -268,7 +274,7 @@ No model, texture or other game file is copied: the entities keep the game's mod
 
 **General:** Ctrl+Z / Ctrl+Y undo and redo, Esc or right-click cancels a drag, Ctrl+S saves. The hint bar above the status line shows the active tool's keys.
 
-**Tool keys:** Add room 1, Cut out 2, Partition 3, Door 4, Window 5, Archway 6, Floor paint 7, Light L, Select V, Eraser X, Select building B, Frame O, Raise / lower G, Fill gaps J, Delete faces F, Model parts P, Edges K, Collision M, Collision box N, Window / door models I, Props and plants Y, Walk check U, Scale figure H, Cutaway C.
+**Tool keys:** Add room 1, Cut out 2, Partition 3, Door 4, Window 5, Archway 6, Floor paint 7, Light L, Select V, Eraser X, Select building B, Frame O, Raise / lower G, Fill gaps J, Delete faces F, Model parts P, Edges K, Collision M, Collision box N, Window / door models I, Props and plants Y, Column 8, Beam 9, Walk check U, Scale figure H, Cutaway C.
 
 ## Code map
 
@@ -291,5 +297,6 @@ No model, texture or other game file is copied: the entities keep the game's mod
 | `ui\js\walk.js` | The walk check |
 | `ui\interiors.html`, `ui\js\interiors.js` | The game's own interiors: list, plan, export |
 | `ui\js\look.js` | Paint tab: materials, wall colours, trim, lights, timecycle |
+| `ui\js\structure.js` | Room ceilings (vaulted, barrel, tray, shed), the Column and Beam tools |
 | `ui\world.html`, `ui\js\world.js`, `ui\js\world3d.js` | Server and world: your resources on the map, the area in 3D |
 | `src\Area.cs` | An area in 3D: the game's buildings, your MLOs, and the collision of both |

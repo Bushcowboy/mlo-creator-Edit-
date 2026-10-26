@@ -83,7 +83,7 @@ window.MLO = window.MLO || {};
         // the finishing touches (project.look): skirting along the floor, crown moulding under the ceiling, detailed casings and window sills
         const LK = (M.Model && M.Model.mergeLook) ? M.Model.mergeLook(project.look) : { skirting: { on: false }, crown: { on: false }, frames: 'simple', sills: false };
         const SK = LK.skirting, CR = LK.crown, detailed = LK.frames === 'detailed', skTex = (SK.tex && TEX.byId[SK.tex]) ? SK.tex : D.trim, crTex = (CR.tex && TEX.byId[CR.tex]) ? CR.tex : D.trim;
-        const acc = new Map(), batches = [], boxes = [], matList = [], matIdx = new Map(), portals = [], lights = [];
+        const acc = new Map(), batches = [], boxes = [], matList = [], matIdx = new Map(), portals = [], lights = [], colTris = [];
         const bmn = [1e9, 1e9, 1e9], bmx = [-1e9, -1e9, -1e9];
         const stats = { tris: 0, boxes: 0, portals: 0, lights: 0, warnings: [] };
 
@@ -135,6 +135,33 @@ window.MLO = window.MLO || {};
             if (mi === undefined) { mi = matList.length; matList.push([type, room]); matIdx.set(mk, mi); }
             boxes.push([x0, y0, z0, x1, y1, z1, mi]);
         }
+        // collision triangles (sloped ceilings): x y z three times and the material index
+        function ctri(a, b, c, type, room) {
+            if (!wantBoxes) return; const mk = type + '|' + room; let mi = matIdx.get(mk);
+            if (mi === undefined) { mi = matList.length; matList.push([type, room]); matIdx.set(mk, mi); }
+            colTris.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], mi);
+        }
+        // a quad whose face looks towards `toward` (the winding is chosen for it)
+        // (corners that fall together, as at the foot of a gable end, make it a triangle; the facing is worked out from all the corners)
+        function quadToward(kind, tex, a, b, c, d, toward, col) {
+            const same = (p, q) => Math.abs(p[0] - q[0]) < 1e-7 && Math.abs(p[1] - q[1]) < 1e-7 && Math.abs(p[2] - q[2]) < 1e-7;
+            const pts = []; [a, b, c, d].forEach(p => { if (!pts.length || !same(pts[pts.length - 1], p)) pts.push(p); }); if (pts.length > 1 && same(pts[0], pts[pts.length - 1])) pts.pop();
+            if (pts.length < 3) return;
+            let nx = 0, ny = 0, nz = 0, cx = 0, cy = 0, cz = 0;                                                        // Newell's normal
+            for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; nx += (p[1] - q[1]) * (p[2] + q[2]); ny += (p[2] - q[2]) * (p[0] + q[0]); nz += (p[0] - q[0]) * (p[1] + q[1]); cx += p[0]; cy += p[1]; cz += p[2]; }
+            if (Math.hypot(nx, ny, nz) < 1e-10) return; cx /= pts.length; cy /= pts.length; cz /= pts.length;
+            if (nx * (toward[0] - cx) + ny * (toward[1] - cy) + nz * (toward[2] - cz) < 0) pts.reverse();
+            if (pts.length === 3) emitTri(kind, 'int', tex, pts[0], pts[1], pts[2]); else emitQuad(kind, 'int', tex, false, pts[0], pts[1], pts[2], pts[3]);
+            if (col) { ctri(pts[0], pts[1], pts[2], col, 0); if (pts.length === 4) ctri(pts[0], pts[2], pts[3], col, 0); }
+        }
+        // a box turned about Z: centre cx cy, half length hu along the angle, half width hn, z0..z1 (all six faces, or no top when noTop)
+        function obox(kind, tex, cx, cy, hu, hn, z0, z1, ang, noTop) {
+            const c = Math.cos(ang), s2 = Math.sin(ang), P = (a, b, z) => [cx + a * hu * c - b * hn * s2, cy + a * hu * s2 + b * hn * c, z], mid = [cx, cy, (z0 + z1) / 2];
+            const q = (p0, p1, p2, p3) => quadToward(kind, tex, p0, p1, p2, p3, [mid[0] + (p0[0] + p2[0] - 2 * mid[0]) * 4, mid[1] + (p0[1] + p2[1] - 2 * mid[1]) * 4, mid[2] + (p0[2] + p2[2] - 2 * mid[2]) * 4]);
+            q(P(-1, -1, z0), P(1, -1, z0), P(1, 1, z0), P(-1, 1, z0)); if (!noTop) q(P(-1, -1, z1), P(1, -1, z1), P(1, 1, z1), P(-1, 1, z1));
+            q(P(-1, -1, z0), P(1, -1, z0), P(1, -1, z1), P(-1, -1, z1)); q(P(-1, 1, z0), P(1, 1, z0), P(1, 1, z1), P(-1, 1, z1));
+            q(P(-1, -1, z0), P(-1, 1, z0), P(-1, 1, z1), P(-1, -1, z1)); q(P(1, -1, z0), P(1, 1, z0), P(1, 1, z1), P(1, -1, z1));
+        }
         // a collision box that is turned about Z (the ones the user draws): the first six numbers are the box around it, the eighth says how it really stands
         function cboxO(cx, cy, z0, z1, hu, hn, yaw, type, room, id) {
             if (!wantBoxes) return;
@@ -152,20 +179,23 @@ window.MLO = window.MLO || {};
         const g = regionGrid(S, fx, fy);
         const inRegion = (x, y) => { for (let i = 0; i < g.nx; i++) if (x >= g.X[i] && x < g.X[i + 1]) { for (let j = 0; j < g.ny; j++) if (y >= g.Y[j] && y < g.Y[j + 1]) return g.mask[i][j]; } return false; };
         const floorTexAt = (cx, cy) => { let t = D.floor; (S.floors || []).forEach(f => { if (cx > f.r[0] && cx < f.r[2] && cy > f.r[1] && cy < f.r[3]) t = f.tex; }); return t; };
+        // rooms with a shaped ceiling (vaulted, barrel, tray, shed): their cells get no flat ceiling; the last such room over a cell owns it
+        const styled = (S.ops || []).map((o, i) => ({ o, i })).filter(x => x.o.op === 'add' && x.o.ceil && x.o.ceil.shape && x.o.ceil.shape !== 'flat' && (+x.o.ceil.rise || 0) > 0.01);
+        const ownerAt = (cx, cy) => { let w = -1; styled.forEach(x => { const r = x.o.r; if (cx > r[0] && cx < r[2] && cy > r[1] && cy < r[3]) w = x.i; }); return w; };
         {
             const cells = [], used = [];
-            for (let i = 0; i < g.nx; i++) { used.push(new Array(g.ny).fill(false)); for (let j = 0; j < g.ny; j++) if (g.mask[i][j]) cells.push([i, j, floorTexAt((g.X[i] + g.X[i + 1]) / 2, (g.Y[j] + g.Y[j + 1]) / 2)]); }
-            const texOf = (i, j) => g.mask[i][j] ? floorTexAt((g.X[i] + g.X[i + 1]) / 2, (g.Y[j] + g.Y[j + 1]) / 2) : null;
+            const keyAt = (cx, cy) => floorTexAt(cx, cy) + '|' + ownerAt(cx, cy);
+            for (let i = 0; i < g.nx; i++) { used.push(new Array(g.ny).fill(false)); for (let j = 0; j < g.ny; j++) if (g.mask[i][j]) cells.push([i, j, keyAt((g.X[i] + g.X[i + 1]) / 2, (g.Y[j] + g.Y[j + 1]) / 2)]); }
+            const texOf = (i, j) => g.mask[i][j] ? keyAt((g.X[i] + g.X[i + 1]) / 2, (g.Y[j] + g.Y[j + 1]) / 2) : null;
             cells.forEach(c => {
                 const i = c[0], j = c[1]; if (used[i][j]) return; const tex = c[2];
                 let i1 = i + 1; while (i1 < g.nx && !used[i1][j] && texOf(i1, j) === tex) i1++;
                 let j1 = j + 1; for (; j1 < g.ny; j1++) { let ok = true; for (let x = i; x < i1; x++) if (used[x][j1] || texOf(x, j1) !== tex) { ok = false; break; } if (!ok) break; }
                 for (let x = i; x < i1; x++) for (let y = j; y < j1; y++) used[x][y] = true;
-                const x0 = g.X[i], x1 = g.X[i1], y0 = g.Y[j], y1 = g.Y[j1];
-                pq('floor', 'int', tex, false, 'z', 0, x0, x1, y0, y1, 1);
-                pq('roof', 'int', D.ceiling, false, 'z', H, x0, x1, y0, y1, -1);
-                cbox(x0, y0, -0.35, x1, y1, 0, TEX.colType(tex), 1);
-                cbox(x0, y0, H, x1, y1, H + 0.1, 101, 0);
+                const x0 = g.X[i], x1 = g.X[i1], y0 = g.Y[j], y1 = g.Y[j1], ftex = tex.split('|')[0], own = +tex.split('|')[1];
+                pq('floor', 'int', ftex, false, 'z', 0, x0, x1, y0, y1, 1);
+                if (own < 0) { pq('roof', 'int', D.ceiling, false, 'z', H, x0, x1, y0, y1, -1); cbox(x0, y0, H, x1, y1, H + 0.1, 101, 0); }
+                cbox(x0, y0, -0.35, x1, y1, 0, TEX.colType(ftex), 1);
             });
         }
 
@@ -354,6 +384,105 @@ window.MLO = window.MLO || {};
             piece(cur, pt.u1, 0, H);
         });
 
+        // ---------------- shaped ceilings, ceiling beams, columns and placed beams ----------------
+        // the height a shaped ceiling adds over H across its span (t = 0..1): gable (two slopes), barrel (a circular arc), shed (one slope)
+        const profile = (shape, rise, span) => {
+            if (shape === 'gable') return (t) => rise * (1 - Math.abs(2 * t - 1));
+            if (shape === 'shed') return (t) => rise * t;
+            if (shape === 'barrel') { const R2 = (span * span / 4 + rise * rise) / (2 * rise); return (t) => Math.max(0, Math.sqrt(Math.max(0, R2 * R2 - Math.pow(t * span - span / 2, 2))) - (R2 - rise)); }
+            return () => 0;
+        };
+        const samples = (shape) => shape === 'barrel' ? Array.from({ length: 17 }, (_, k) => k / 16) : (shape === 'gable' ? [0, 0.5, 1] : [0, 1]);
+        const ceilingAt = [];          // [{ r, shape, alongX, h(x, y) }]: for columns and beams to reach the ceiling there
+        const Tc = Math.max(0, Math.min(0.5, +cfg.wallThick || 0));
+        styled.forEach(({ o, i }) => {
+            const C = o.ceil, shape = C.shape, rise = Math.max(0.05, Math.min(8, +C.rise || 1)), ctex = (C.tex && TEX.byId[C.tex]) ? C.tex : D.ceiling;
+            const r = [o.r[0] + Tc, o.r[1] + Tc, o.r[2] - Tc, o.r[3] - Tc]; if (r[2] - r[0] < 0.3 || r[3] - r[1] < 0.3) return;
+            const w = r[2] - r[0], d = r[3] - r[1], alongX = C.axis === 'x' ? true : (C.axis === 'y' ? false : w >= d);       // the ridge runs along the longer side unless set
+            // (u along the ridge, v across the span) -> world
+            const u0 = alongX ? r[0] : r[1], u1 = alongX ? r[2] : r[3], v0 = alongX ? r[1] : r[0], v1 = alongX ? r[3] : r[2], span = v1 - v0;
+            const W = (u, v, z) => alongX ? [u, v, z] : [v, u, z], inside = W((u0 + u1) / 2, (v0 + v1) / 2, H - 1.2);
+            if (shape === 'tray') {
+                const m = Math.max(0.1, Math.min(Math.min(w, d) / 2 - 0.15, +C.margin || 0.45)), ix0 = r[0] + m, iy0 = r[1] + m, ix1 = r[2] - m, iy1 = r[3] - m, top = H + rise;
+                // the flat border at H, the raised middle, and the four step walls between them
+                pq('roof', 'int', ctex, false, 'z', H, r[0], r[2], r[1], iy0, -1); pq('roof', 'int', ctex, false, 'z', H, r[0], r[2], iy1, r[3], -1);
+                pq('roof', 'int', ctex, false, 'z', H, r[0], ix0, iy0, iy1, -1); pq('roof', 'int', ctex, false, 'z', H, ix1, r[2], iy0, iy1, -1);
+                pq('roof', 'int', ctex, false, 'z', top, ix0, ix1, iy0, iy1, -1);
+                pq('wall', 'int', ctex, false, 'x', ix0, iy0, iy1, H, top, 1); pq('wall', 'int', ctex, false, 'x', ix1, iy0, iy1, H, top, -1);
+                pq('wall', 'int', ctex, false, 'y', iy0, H, top, ix0, ix1, 1); pq('wall', 'int', ctex, false, 'y', iy1, H, top, ix0, ix1, -1);
+                cbox(r[0], r[1], H, r[2], r[3], H + 0.1, 101, 0);
+                ceilingAt.push({ r, h: (x, y) => (x > ix0 && x < ix1 && y > iy0 && y < iy1) ? rise : 0 });
+            } else {
+                const f = profile(shape, rise, span), ts = samples(shape), vs = ts.map(t => v0 + t * span), hs = ts.map(t => f(t));
+                for (let k = 0; k + 1 < ts.length; k++) {
+                    const a = W(u0, vs[k], H + hs[k]), b = W(u1, vs[k], H + hs[k]), c = W(u1, vs[k + 1], H + hs[k + 1]), e = W(u0, vs[k + 1], H + hs[k + 1]);
+                    quadToward('roof', ctex, a, b, c, e, inside, 101);
+                    // the two end walls between H and the ceiling (gable ends), facing into the room
+                    // (it reaches 1 cm down over the top of the wall below, so no crack shows along the joint)
+                    [u0, u1].forEach(ue => { const zb = H - 0.01, p0 = W(ue, vs[k], zb), p1 = W(ue, vs[k + 1], zb), p2 = W(ue, vs[k + 1], H + hs[k + 1]), p3 = W(ue, vs[k], H + hs[k]); if (hs[k] + hs[k + 1] > 1e-4) quadToward('wall', ctex, p0, p1, p2, p3, inside, 101); });
+                }
+                // a shed ceiling's high side: a wall from H up to the top along the ridge
+                if (shape === 'shed') quadToward('wall', ctex, W(u0, v1, H - 0.01), W(u1, v1, H - 0.01), W(u1, v1, H + rise), W(u0, v1, H + rise), inside, 101);
+                ceilingAt.push({ r, h: (x, y) => { const v = alongX ? y : x; return f(Math.max(0, Math.min(1, (v - v0) / span))); } });
+                // beams: across = ribs / rafters following the ceiling; along = purlins at heights across the span (and a ridge beam for a gable)
+                const B = C.beams || {};
+                if (B.on) {
+                    const bw = Math.max(0.04, Math.min(0.6, +B.w || 0.15)), bd = Math.max(0.03, Math.min(0.8, +B.d || 0.18)), btex = (B.tex && TEX.byId[B.tex]) ? B.tex : 'wood_dark', n = Math.max(1, Math.min(60, Math.round(+B.n || 4)));
+                    if (B.dir !== 'along') for (let q = 1; q <= n; q++) {
+                        const uc = u0 + (u1 - u0) * q / (n + 1);
+                        for (let k = 0; k + 1 < ts.length; k++) {
+                            const za = H + hs[k], zb = H + hs[k + 1], la = [uc - bw / 2, uc + bw / 2];
+                            // the underside of the rib, d below the ceiling, and its two sides
+                            const lo = (u, kk) => W(u, vs[kk], H + hs[kk] - bd), hi = (u, kk) => W(u, vs[kk], H + hs[kk] + 0.005);
+                            quadToward('roof', btex, lo(la[0], k), lo(la[1], k), lo(la[1], k + 1), lo(la[0], k + 1), [inside[0], inside[1], inside[2] - 5]);
+                            la.forEach((u, si) => { const side = W(u + (si ? 5 : -5), (vs[k] + vs[k + 1]) / 2, (za + zb) / 2 - bd / 2); quadToward('roof', btex, lo(u, k), lo(u, k + 1), hi(u, k + 1), hi(u, k), side); });
+                        }
+                    }
+                    if (B.dir === 'along' || B.dir === 'grid') {
+                        const vsel = shape === 'gable' ? [0.5].concat(Array.from({ length: n }, (_, q) => (q + 1) / (n + 1) / 2)).concat(Array.from({ length: n }, (_, q) => 0.5 + (q + 1) / (n + 1) / 2)) : Array.from({ length: n }, (_, q) => (q + 1) / (n + 1));
+                        vsel.forEach(t => { const vc = v0 + t * span, zt = H + f(t); const c0 = W((u0 + u1) / 2, vc, 0); obox('roof', btex, c0[0], c0[1], alongX ? (u1 - u0) / 2 : bw / 2, alongX ? bw / 2 : (u1 - u0) / 2, zt - bd, zt, 0, true); });
+                    }
+                }
+            }
+        });
+        // ceiling beams of flat (and tray) rooms: across, along or a grid, under the ceiling
+        (S.ops || []).forEach(o => {
+            if (o.op !== 'add' || !o.ceil || !o.ceil.beams || !o.ceil.beams.on) return; const shape = o.ceil.shape || 'flat';
+            if (shape !== 'flat' && shape !== 'tray' && (+o.ceil.rise || 0) > 0.01) return;          // (vaulted rooms have their own ribs and purlins above)
+            const B = o.ceil.beams, r = [o.r[0] + Tc, o.r[1] + Tc, o.r[2] - Tc, o.r[3] - Tc], w = r[2] - r[0], d = r[3] - r[1]; if (w < 0.3 || d < 0.3) return;
+            const bw = Math.max(0.04, Math.min(0.6, +B.w || 0.15)), bd = Math.max(0.03, Math.min(0.8, +B.d || 0.18)), btex = (B.tex && TEX.byId[B.tex]) ? B.tex : 'wood_dark', n = Math.max(1, Math.min(60, Math.round(+B.n || 4)));
+            const alongX = o.ceil.axis === 'x' ? true : (o.ceil.axis === 'y' ? false : w >= d);
+            // across: beams spanning the short way, spaced along the long way (across the ridge direction)
+            const across = () => { for (let q = 1; q <= n; q++) { if (alongX) { const x = r[0] + w * q / (n + 1); box('roof', 'int', btex, x - bw / 2, r[1], H - bd, x + bw / 2, r[3], H); } else { const y = r[1] + d * q / (n + 1); box('roof', 'int', btex, r[0], y - bw / 2, H - bd, r[2], y + bw / 2, H); } } };
+            const along = () => { for (let q = 1; q <= n; q++) { if (alongX) { const y = r[1] + d * q / (n + 1); box('roof', 'int', btex, r[0], y - bw / 2, H - bd, r[2], y + bw / 2, H); } else { const x = r[0] + w * q / (n + 1); box('roof', 'int', btex, x - bw / 2, r[1], H - bd, x + bw / 2, r[3], H); } } };
+            if (B.dir === 'along') along(); else if (B.dir === 'grid') { across(); along(); } else across();
+        });
+        // how high the ceiling is over a point (H, or a shaped room's ceiling there)
+        const ceilZ = (x, y) => { let z = H; ceilingAt.forEach(c => { if (x > c.r[0] - 1e-6 && x < c.r[2] + 1e-6 && y > c.r[1] - 1e-6 && y < c.r[3] + 1e-6) z = Math.max(z, H + c.h(x, y)); }); return z; };
+        // columns: square or round posts from the floor to the ceiling, with a base and a capital when asked for
+        (S.columns || []).forEach(cl => {
+            const sz = Math.max(0.08, Math.min(2, +cl.w || 0.3)), h2 = sz / 2, tex = (cl.tex && TEX.byId[cl.tex]) ? cl.tex : D.trim, top = cl.h ? Math.min(+cl.h, ceilZ(cl.x, cl.y)) : ceilZ(cl.x, cl.y), x = cl.x, y = cl.y;
+            const bt = cl.trim !== false ? 0.12 : 0, bo = cl.trim !== false ? 0.035 : 0;
+            if (cl.shape === 'round') {
+                const N = 16, P = (k, rad, z) => [x + Math.cos(k / N * Math.PI * 2) * rad, y + Math.sin(k / N * Math.PI * 2) * rad, z];
+                for (let k = 0; k < N; k++) quadToward('wall', tex, P(k, h2, bt), P(k + 1, h2, bt), P(k + 1, h2, top - bt), P(k, h2, top - bt), [x + Math.cos((k + 0.5) / N * Math.PI * 2) * 9, y + Math.sin((k + 0.5) / N * Math.PI * 2) * 9, top / 2]);
+                if (bt) { box('wall', 'int', tex, x - h2 - bo, y - h2 - bo, 0, x + h2 + bo, y + h2 + bo, bt); box('wall', 'int', tex, x - h2 - bo, y - h2 - bo, top - bt, x + h2 + bo, y + h2 + bo, top); }
+            } else {
+                box('wall', 'int', tex, x - h2, y - h2, bt, x + h2, y + h2, top - bt);
+                if (bt) { box('wall', 'int', tex, x - h2 - bo, y - h2 - bo, 0, x + h2 + bo, y + h2 + bo, bt); box('wall', 'int', tex, x - h2 - bo, y - h2 - bo, top - bt, x + h2 + bo, y + h2 + bo, top); }
+            }
+            cbox(x - h2 - bo, y - h2 - bo, 0, x + h2 + bo, y + h2 + bo, top, TEX.colType(tex), 0);
+        });
+        // placed beams: from a to b, their top at the ceiling (or at a height you give), any angle on the plan
+        (S.beams || []).forEach(bm => {
+            const ax = bm.a[0], ay = bm.a[1], bx = bm.b[0], by = bm.b[1], len = Math.hypot(bx - ax, by - ay); if (len < 0.05) return;
+            const bw = Math.max(0.04, Math.min(1, +bm.w || 0.2)), bd = Math.max(0.04, Math.min(2, +bm.d || 0.25)), tex = (bm.tex && TEX.byId[bm.tex]) ? bm.tex : 'wood_dark';
+            const cx = (ax + bx) / 2, cy = (ay + by) / 2, top = bm.z ? +bm.z : Math.min(ceilZ(ax, ay), ceilZ(bx, by), ceilZ(cx, cy)), ang = Math.atan2(by - ay, bx - ax);
+            obox('roof', tex, cx, cy, len / 2, bw / 2, top - bd, top, ang, top >= H - 1e-4);
+            if (top - bd < 2.3) cboxO(cx, cy, top - bd, top, len / 2, bw / 2, ang, TEX.colType(tex), 0, 'beam' + (bm.id || ''));          // (low enough to walk into: it stops you)
+        });
+        stats.columns = (S.columns || []).length; stats.beams = (S.beams || []).length; stats.vaults = styled.length;
+
         // ---------------- openings cut out of the model's faces: glass in windows, a frame around windows and doors ----------------
         // An oriented box of a frame: u = ua..ub across the opening (from its centre), z = za..zb, bd deep, centred dn along the outward normal.
         const frameBar = (k, dn, bd, ua, ub, za, zb) => {
@@ -477,7 +606,7 @@ window.MLO = window.MLO || {};
         batches.forEach(b => { b.pos = new Float32Array(b.pos); b.nrm = new Float32Array(b.nrm); b.uv = new Float32Array(b.uv); b.idx = new Uint16Array(b.idx); });
         stats.boxes = boxes.length; stats.portals = portals.length; stats.lights = lights.length;
         const resolved = []; segs.forEach(sg => sg.ops.forEach(op => resolved.push({ o: sg.o, c: sg.c, inward: sg.inward, u0: op.u0, u1: op.u1, z0: op.z0, z1: op.z1, type: op.type, entrance: op.entrance })));
-        return { batches, boxes, matList, portals, lights, entrance: null, bounds: { mn: bmn, mx: bmx }, stats, shell: { grid: g, segs, resolved } };
+        return { batches, boxes, colTris, matList, portals, lights, entrance: null, bounds: { mn: bmn, mx: bmx }, stats, shell: { grid: g, segs, resolved } };
     }
 
     // the final region as a few rectangles (used to tell the patcher where the walkable interior is)

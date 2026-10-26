@@ -2,6 +2,16 @@
 
 Changes on the `feature/game-interiors` branch, newest first. Each entry says how it was tested. "Not tested in game" means it compiles and passes the checks listed, but nobody has loaded it in GTA V / FiveM yet: report what breaks and the next push fixes it.
 
+## 2026-10-26 (10) — Vaulted ceilings, beams and columns
+
+- **Room ceilings** (select a room with Select, *Ceiling*): *Flat*, *Vaulted* (two slopes up to a ridge), *Barrel* (a round vault), *Tray* (a raised middle with a step all round, set the border), *Shed* (one slope, with a wall on the high side). Set the rise, which way the ridge runs (the long side by default, or along x / y) and the texture. The gable ends close the space above the walls. The sloped ceiling gets collision triangles; the room's box in the MLO grows to hold it.
+- **Ceiling beams** per room: *Across*, *Along* or *Both* (a coffered grid), how many, width, depth, texture. Under a vault they follow it: across gives ribs or rafters, along gives purlins and a ridge beam.
+- **Column tool** (key 8, *Finish the inside > Columns and beams*): click the floor to stand a column; square or round (16 sides), width, texture, base and capital, height (0 = to the ceiling, also under a vault: it reaches the slope above it). Collision box. Click a column again to remove it.
+- **Beam tool** (key 9): click where a beam starts and where it ends; straight or 45° (Shift: any angle); width, depth, texture, and its top at the ceiling or at a height you give. A beam low enough to walk into (bottom under 2.3 m) gets a turned collision box. Alt+click removes one; the Eraser takes columns and beams too. Columns and beams are listed with all their settings in the tool panels.
+- Per building, like the rooms. For imported-model projects (the tools); the shapes are built for grabbed-house projects too. The editor's view hides ceilings as before (tick *Ceiling* in the view options to see them).
+- Make sure the building's roof is higher than the vault, or the ceiling shows through it outside.
+- Tested: builder in Node (20 checks: ridge height and direction, no flat ceiling left, gable ends closed and facing in, barrel end with 16 segments, shed wall, tray step, beam positions, ribs, column reaching the slope, beam collision, no zero-area collision triangles); the real exporter + CodeWalker (model and collision reach the ridge, room box holds it); browser checks of the tools and panels. **Not tested in game.**
+
 ## 2026-10-26 (9) — Server and world: fix collision between MLOs
 
 - In the 3D view, *Fix its collision* on a resource: click a piece of its collision lines to select it (yellow; the rest of its part dimmer), *Take it out* (Delete) or *The whole part* (Shift+Delete), *Add a box here* (B) standing on the clicked point with its width, depth and height, Undo (Ctrl+Z).

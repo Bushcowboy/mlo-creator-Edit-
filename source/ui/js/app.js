@@ -85,7 +85,7 @@ window.MLO = window.MLO || {};
     App.setTool = function (tool) {
         M.Errors.crumb('tool ' + tool);
         if (isShell()) {
-            const ok = isImport() ? ['building', 'frame', 'level', 'room', 'cut', 'fill', 'part', 'door', 'window', 'arch', 'floor', 'light', 'figure', 'faces', 'edges', 'parts', 'collision', 'cbox', 'walk', 'fit', 'plants', 'select', 'eraser', 'paint'] : ['room', 'cut', 'part', 'door', 'window', 'arch', 'floor', 'select', 'eraser', 'paint'];
+            const ok = isImport() ? ['building', 'frame', 'level', 'room', 'cut', 'fill', 'part', 'door', 'window', 'arch', 'floor', 'light', 'column', 'beam', 'figure', 'faces', 'edges', 'parts', 'collision', 'cbox', 'walk', 'fit', 'plants', 'select', 'eraser', 'paint'] : ['room', 'cut', 'part', 'door', 'window', 'arch', 'floor', 'select', 'eraser', 'paint'];
             if (ok.indexOf(tool) < 0) return;
             if (tool === 'paint') { S.shellTool = 'paint'; App.setTab('paint'); return; }
             if (tool === 'collision' && isImport() && !S.showCollision) { S.showCollision = true; M.ImportModel.requestCollision(); M.UI.renderRight(); }       // the pieces to pick are the orange lines
