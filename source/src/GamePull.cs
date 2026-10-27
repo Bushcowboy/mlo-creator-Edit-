@@ -32,9 +32,7 @@ namespace MloCreator
         static string K(string n) { return (n ?? "").ToLowerInvariant(); }
         public byte[] File(string name)
         {
-            RpfFile owner; RpfFileEntry e = Vanilla.GetEntry(K(name), out owner); if (e == null) return null;
-            byte[] data = owner.ExtractFile(e); RpfResourceFileEntry rre = e as RpfResourceFileEntry;
-            return rre != null ? ResourceBuilder.AddResourceHeader(rre, ResourceBuilder.Compress(data)) : data;
+            return Vanilla.Whole(name);
         }
         public string Archive(string name) { RpfFile owner; return Vanilla.GetEntry(K(name), out owner) == null ? "" : owner.Path; }
         public List<string> InArchive(string archive)
@@ -54,7 +52,7 @@ namespace MloCreator
                 foreach (RpfEntry e in rf.AllEntries)
                 {
                     RpfFileEntry fe = e as RpfFileEntry; if (fe == null || !fe.Name.Equals(fileName, StringComparison.OrdinalIgnoreCase)) continue;
-                    try { byte[] d = rf.ExtractFile(fe); RpfResourceFileEntry rre = fe as RpfResourceFileEntry; l.Add(rre != null ? ResourceBuilder.AddResourceHeader(rre, ResourceBuilder.Compress(d)) : d); } catch (Exception) { }
+                    try { l.Add(Vanilla.Whole(rf, fe)); } catch (Exception) { }
                 }
             }
             return l;

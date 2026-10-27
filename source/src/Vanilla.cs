@@ -78,6 +78,15 @@ namespace MloCreator
             string k = name.ToLowerInvariant(); entry = null; RpfFileEntry e; if (!ent.TryGetValue(k, out e)) return null;
             entry = e; return own[k].ExtractFile(e);
         }
+        // A game file whole, as it would be on disk in a resource folder (RSC7 header, compressed): what CodeWalker's one-argument Load(data) reads.
+        // (ExtractFile gives a resource file's data already unpacked; Load(data) on that unpacks it again and fails: "Block length does not match with its complement".
+        //  With the unpacked data, load with the entry instead: Load(data, entry).)
+        public static byte[] Whole(RpfFile owner, RpfFileEntry e)
+        {
+            byte[] data = owner.ExtractFile(e); RpfResourceFileEntry rre = e as RpfResourceFileEntry;
+            return rre != null && data != null ? ResourceBuilder.AddResourceHeader(rre, ResourceBuilder.Compress(data)) : data;
+        }
+        public static byte[] Whole(string name) { RpfFile owner; RpfFileEntry e = GetEntry((name ?? "").ToLowerInvariant(), out owner); return e == null ? null : Whole(owner, e); }
 
         // ---------------- ymap extents index (built once, then cached on disk) ----------------
         class YmapInfo { public string Name; public float X0, Y0, X1, Y1; }

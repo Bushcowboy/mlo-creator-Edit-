@@ -306,8 +306,8 @@ namespace MloCreator
         }
 
         // ---------------- one interior, read again from its .ytyp: rooms, portals, entity sets and where its entities stand (for the plan) ----------------
-        // the game's files by name; a test swaps this for files on disk
-        public static Func<string, byte[]> GameFile = delegate (string name) { RpfFileEntry e; return Vanilla.Bytes(name, out e); };
+        // the game's files by name, whole (as files on disk: they are read with the one-argument Load); a test swaps this for files on disk
+        public static Func<string, byte[]> GameFile = delegate (string name) { return Vanilla.Whole(name); };
 
         static MloArchetype LoadMlo(MloInfo m, out YtypFile ytyp)
         {

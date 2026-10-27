@@ -2,6 +2,11 @@
 
 Changes on the `feature/game-interiors` branch, newest first. Each entry says how it was tested. "Not tested in game" means it compiles and passes the checks listed, but nobody has loaded it in GTA V / FiveM yet: report what breaks and the next push fixes it.
 
+## 2026-10-26 (14) — Fix: "Block length does not match with its complement" when adding a game interior
+
+- **Adding an interior on the game interiors page failed** with *Block length does not match with its complement* on a real GTA V install, and so did its export and *From a game interior* in Place props. The program read the interior's type file (and, in the export, its collision files) out of the game's archives already unpacked, then handed it to CodeWalker as if it were a packed file, which unpacked it a second time. The list itself was fine (it reads the files the right way). Now those files are handed over whole, the same way *pull a building from the game* already did (`Vanilla.Whole`).
+- Tested: a new host test packs the test interiors and their collision into a real `.rpf` archive with CodeWalker and reads them back the way the program reads the game's archives: the old way fails with this same error (Mono words it *Corrupted data*), the new way adds the interior (rooms, portals, entity sets), lists its props and exports two joined interiors with their collision (32 checks). The earlier tests do not catch it because they handed the program whole files from disk. All host suites again (143). **Not tested on a real GTA V install**: tell me if Add or Export still fails, with the message.
+
 ## 2026-10-26 (13) — The ready-to-run program at the top of the repository is current again
 
 - **The `MloCreator.exe` and `ui\` at the top of the repository were still the 1.0 release**, so everything since (the game interiors page and its *Build the list*, the server and world page, picking a building, the guided build, ceilings, columns, props...) was only in `source\`. Both are now rebuilt from `source\`: the exe from `source\src` (built with Mono's compiler under C# 5 rules, the same language level as the Windows build, with the same icon, manifest and version information as before), and `ui\` is a copy of `source\ui`. From now on every push updates both.
