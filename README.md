@@ -40,6 +40,8 @@ MLO Creator also uses CodeWalker's library itself (it is built against it, see [
 
 Unzip the release anywhere you can write to and double-click `MloCreator.exe`. Projects, cache, settings and exports are kept next to the program (`projects\`, `cache\`, `output\`, `settings.json`). The exe is not signed, so Windows may ask once ("More info", then "Run anyway").
 
+**From this repository** (the `feature/game-interiors` branch): the top folder *is* the ready-to-run program: `MloCreator.exe` with `ui\`, `lib\` and `models\` beside it (`source\` holds the code). Download the branch as a zip (or `git pull`) and run `MloCreator.exe` from the top folder. The editor is the `ui\` folder next to the exe, read from disk, so keep the exe and `ui\` from the same download: an older `ui\` with a newer exe (or the other way round) is missing buttons such as *Build the list*.
+
 Command line options: `--browser` (use an Edge or Chrome app window), `--devtools` (allow F12), `--no-window` (server only, for testing), `--port N`.
 
 ## Build it yourself

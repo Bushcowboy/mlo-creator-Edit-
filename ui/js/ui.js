@@ -129,6 +129,7 @@ window.MLO = window.MLO || {};
             root.append(el('div', { class: 'defrow' }, swatchEl(P.defaults[r[0]], 22), el('span', null, r[1]),
                 el('button', { class: 'btn sm', onclick: () => { Model.edit(PP => { PP.defaults[r[0]] = S.benchSel || S.brush[S.paintTarget]; }); M.App.refreshPanels(); } }, 'Set')));
         });
+        if (M.Look) M.Look.render(root);
     }
 
     // a picture the user picked becomes a texture in the "Mine" group (stored with the project, exported like the others)
@@ -155,15 +156,25 @@ window.MLO = window.MLO || {};
         const chips = el('div', { class: 'chips' }); cats.forEach(c => chips.append(el('button', { class: 'chip' + (S.benchCat === c ? ' on' : ''), onclick: () => { S.benchCat = c; renderBench(); } }, c)));
         if (S.project.kind === 'import') chips.append(el('label', { class: 'chip', style: { cursor: 'pointer' }, title: 'Use a picture of your own (png, jpg) as a texture' }, '+ Add an image',
             el('input', { type: 'file', accept: 'image/*', style: { display: 'none' }, onchange: (e) => { addUserImage(e.target.files[0]); e.target.value = ''; } })));
-        const grid = el('div', { class: 'sw-grid' });
-        TEX.list.filter(x => S.benchCat === 'All' || x.cat === S.benchCat).forEach(x => {
-            grid.append(el('div', { class: 'sw' + (x.id === S.benchSel ? ' on' : ''), title: x.name, onclick: () => { S.benchSel = x.id; S.brush[S.paintTarget] = x.id; M.App.refreshPanels(); } }, swatchEl(x.id, 64), el('span', null, x.name)));
-        });
+        const grid = el('div', { class: 'sw-grid' }), pick = (id) => { S.benchSel = id; S.brush[S.paintTarget] = id; M.App.refreshPanels(); };
+        const cell = (x) => el('div', { class: 'sw' + (x.id === S.benchSel ? ' on' : ''), title: x.name + (x.kind === 'model' ? ' (on the model\'s ' + (TEX.whereOnModel(x) || 'faces') + ', ' + x.uses + ' triangles)' : ''), onclick: () => pick(x.id) }, swatchEl(x.id, 64), el('span', null, x.name));
+        TEX.list.filter(x => S.benchCat === 'All' || x.cat === S.benchCat).forEach(x => grid.append(cell(x)));
+        // the model's own textures: the program's textures closest in colour too (they come with normal maps made for them)
+        let close = null;
+        if (S.benchCat === TEX.MODEL_CAT && TEX.modelList().length) {
+            const ref = t.kind === 'model' ? t : TEX.modelList()[0], g2 = el('div', { class: 'sw-grid' });
+            TEX.nearest(ref.id, 6).forEach(id => g2.append(cell(TEX.def(id))));
+            close = el('div', null, el('div', { class: 'note', style: { margin: '8px 0 4px' } }, 'Close to "' + ref.name + '" among the program\'s textures:'), g2);
+        }
+        const tileRow = (t.kind === 'user')
+            ? el('div', { class: 'note' }, 'repeats every ', el('input', { type: 'number', step: '0.1', min: '0.2', max: '8', value: t.tile, style: { width: '58px' }, onchange: (e) => { const v = Math.min(8, Math.max(0.2, parseFloat(e.target.value) || 1)); t.tile = v; if (S.ref && S.ref.tex) S.ref.tex.forEach(q => { if (q.id === t.id) q.tile = v; }); Model.saveRef().catch(() => { }); M.App.remesh(); } }), ' m')
+            : (t.kind === 'model'
+                ? el('div', { class: 'note' }, 'From the model' + (TEX.whereOnModel(t) ? ' (its ' + TEX.whereOnModel(t) + ')' : '') + ' · ' + t.w + ' x ' + t.h + ' · repeats every ', el('input', { type: 'number', step: '0.05', min: '0.05', max: '50', value: Math.round(TEX.tile(t.id) * 100) / 100, style: { width: '62px' }, title: t.est ? 'Measured on the model: ' + t.est.toFixed(2) + ' m' : 'The model does not say', onchange: (e) => { const v = Math.min(50, Math.max(0.05, parseFloat(e.target.value) || t.tile)); Model.edit(P => { P.import.texTile = Object.assign({}, P.import.texTile || {}); if (Math.abs(v - t.tile) < 1e-4) delete P.import.texTile[t.src]; else P.import.texTile[t.src] = v; }); M.App.refreshPanels(); } }), ' m',
+                    t.est ? ' (as on the model: ' + t.est.toFixed(2) + ' m)' : '', el('br'), t.normal ? 'Its own normal and specular maps go with it.' : 'No normal map of its own: one is made from the picture.', el('br'), 'The export copies the picture itself (up to 1024 px) from your files.')
+                : el('div', { class: 'note' }, t.cat + ' · repeats every ' + t.tile + ' m'));
         b.append(el('div', { class: 'bench' },
-            el('div', { class: 'cur' }, el('div', { class: 'h' }, 'Texture'), big, el('div', null, el('b', null, t.name), t.kind === 'user'
-                ? el('div', { class: 'note' }, 'repeats every ', el('input', { type: 'number', step: '0.1', min: '0.2', max: '8', value: t.tile, style: { width: '58px' }, onchange: (e) => { const v = Math.min(8, Math.max(0.2, parseFloat(e.target.value) || 1)); t.tile = v; if (S.ref && S.ref.tex) S.ref.tex.forEach(q => { if (q.id === t.id) q.tile = v; }); Model.saveRef().catch(() => { }); M.App.remesh(); } }), ' m')
-                : el('div', { class: 'note' }, t.cat + ' · repeats every ' + t.tile + ' m'))),
-            el('div', null, chips, grid)));
+            el('div', { class: 'cur' }, el('div', { class: 'h' }, 'Texture'), big, (S.project.look && S.project.look.normalMaps === false) ? null : el('div', { class: 'note', style: { display: 'flex', gap: '6px', alignItems: 'center', margin: '4px 0' } }, TEX.mapSwatch(S.benchSel, 'normal', 40), TEX.mapSwatch(S.benchSel, 'spec', 40), 'normal · specular'), el('div', null, el('b', null, t.name), tileRow)),
+            el('div', null, chips, grid, close)));
     }
 
     // ---------- left: export ----------
@@ -185,14 +196,31 @@ window.MLO = window.MLO || {};
     }
     function safeRes(s) { return (s || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40); }
 
+    // the names of the exported files: developer_project_ (Settings: the developer is the same for every project), or a folder and prefix typed in
+    function renderNames(root, text) {
+        const P = S.project, X = P.export, box = el('div');
+        const draw = () => {
+            box.innerHTML = ''; const N = Model.exportNames(P);
+            box.append(el('div', { class: 'row' }, el('label', null, 'Developer'), el('input', { type: 'text', class: 'grow', value: Model.getDeveloper(), placeholder: 'your name or team, e.g. Bushcowboy', maxlength: 40, title: 'Used in the name of every file you export, in every project', onchange: async (e) => { await Model.setDeveloper(e.target.value); draw(); } })));
+            box.append(el('label', { class: 'chk' }, el('input', { type: 'checkbox', checked: X.autoNames !== false ? true : null, onchange: (e) => { X.autoNames = e.target.checked; if (!e.target.checked && !X.resource) X.resource = N.resource; if (!e.target.checked) P.prefix = N.prefix.slice(0, 30); Model.touch(); draw(); } }), 'Name the files after the developer and the project'));
+            if (N.auto) {
+                box.append(el('div', { class: 'note' }, 'Files ', el('b', null, N.prefix + '_...'), ', folder ', el('b', null, N.resource), '. Rename the project to change them.' + (Model.getDeveloper() ? '' : ' Type a developer name to put it in front.')));
+            } else {
+                box.append(el('div', { class: 'row' }, el('label', null, 'Folder'), text('resource', 'mlo_' + (safeRes(P.name) || 'house'))));
+                box.append(el('div', { class: 'row' }, el('label', null, 'Prefix'), el('input', { type: 'text', class: 'grow', value: P.prefix, maxlength: 30, title: 'Every model in the pack starts with this. Keep it unique on your server.', oninput: (e) => { P.prefix = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30); Model.touch(); } })));
+            }
+            box.append(el('div', { class: 'note' }, 'Game files the export replaces (a cut building model, its collision, occluders) keep the game\'s own names, so they replace the originals.'));
+        };
+        root.append(el('div', { class: 'h' }, 'Resource')); draw(); root.append(box);
+        root.append(el('div', { class: 'row' }, el('label', null, 'Label'), text('label', P.name)));
+    }
+    UI.renderNames = renderNames;
+
     let exportEls = {};
     function renderExport(root) {
         const P = S.project, X = P.export, E = exportEls = {};
         const text = (key, ph, w) => el('input', { type: 'text', class: 'grow', value: X[key] || '', placeholder: ph || '', oninput: (e) => { X[key] = e.target.value; Model.touch(); } });
-        root.append(el('div', { class: 'h' }, 'Resource'));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Folder'), text('resource', 'mlo_' + (safeRes(P.name) || 'house'))));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Prefix'), el('input', { type: 'text', class: 'grow', value: P.prefix, maxlength: 8, title: 'Every model in the pack starts with this. Keep it unique on your server.', oninput: (e) => { P.prefix = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8); Model.touch(); } })));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Label'), text('label', P.name)));
+        renderNames(root, text);
         root.append(el('div', { class: 'h' }, 'Where it goes'));
         E.ent = el('div', { class: 'note' }); root.append(E.ent);
         root.append(el('div', { class: 'note' }, 'In the game, stand in the doorway of the real spot and copy your coordinates, e.g. ', el('b', null, 'vec4(x, y, z, heading)'), '.'));
@@ -229,13 +257,13 @@ window.MLO = window.MLO || {};
         E.log.innerHTML = ''; E.after.style.display = 'none';
         if (!built.batches.length) { toast('Nothing to export yet. Build walls and floors first.', 'warn'); return; }
         const pl = computePlacement(P, built); if (pl.error) { toast(pl.error, 'warn'); return; }
-        if (!P.prefix) { toast('Give the project a prefix first.', 'warn'); return; }
-        const resource = safeRes(X.resource) || ('mlo_' + (safeRes(P.name) || 'house'));
+        const N = Model.exportNames(P); if (!N.prefix) { toast('Give the project a prefix first.', 'warn'); return; }
+        const resource = N.resource;
         E.btn.disabled = true; E.btn.textContent = 'Exporting...';
         try {
             log('Meshing: ' + built.stats.tris + ' triangles, ' + built.stats.boxes + ' collision boxes, ' + built.stats.portals + ' portals, ' + built.stats.lights + ' lights');
             if (!built.portals.length) log('Warning: no windows or doors on an outside wall, so the interior is never visible from outside. Add an entrance door.', 'bad');
-            const model = Mesher.toExport(P, built, { light: {}, model: { resource, prefix: P.prefix, label: X.label || P.name, timecycle: 'hash_E83C53FC', placement: { x: pl.x, y: pl.y, z: pl.z, heading: pl.heading }, entranceNote: pl.note, outDir: X.outDir || undefined } });
+            const model = Mesher.toExport(P, built, { light: {}, model: { resource, prefix: N.prefix, label: X.label || P.name, timecycle: 'hash_E83C53FC', placement: { x: pl.x, y: pl.y, z: pl.z, heading: pl.heading }, entranceNote: pl.note, outDir: X.outDir || undefined } });
             const res = await Model.api('export', 'POST', model);
             if (!res.ok) { log('Export failed: ' + res.error, 'bad'); console.error(res.detail); }
             else {
@@ -293,15 +321,21 @@ window.MLO = window.MLO || {};
         nameIn.addEventListener('keydown', e => { if (e.key === 'Enter') create('import'); });
         const card = (title, text, kind, primary) => el('button', { class: 'btn' + (primary ? ' primary' : ''), style: { display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', marginTop: '8px', whiteSpace: 'normal' }, onclick: () => create(kind) },
             el('div', { style: { fontWeight: 700 } }, title), el('div', { style: { fontWeight: 400, fontSize: '12px', opacity: 0.85, marginTop: '3px' } }, text));
-        modal(el('div', { class: 'dlg' }, el('h2', null, 'New project'),
+        const go = (url) => { closeModal(); try { sessionStorage.setItem('mlo.noauto', '1'); } catch (e) { } location.href = url; };
+        const link = (title, text, onclick, primary) => el('button', { class: 'btn' + (primary ? ' primary' : ''), style: { display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', marginTop: '8px', whiteSpace: 'normal' }, onclick },
+            el('div', { style: { fontWeight: 700 } }, title), el('div', { style: { fontWeight: 400, fontSize: '12px', opacity: 0.85, marginTop: '3px' } }, text));
+        modal(el('div', { class: 'dlg' }, el('h2', null, 'What do you want to turn into an MLO?'),
             el('div', { class: 'row' }, el('label', null, 'Name'), nameIn),
-            card('Interior in an imported model', 'Import a building\'s model files (.ydr, .ytd, .ybn, .ymap), cut doors and windows through its walls, build the rooms inside, place lights and doors. Nothing is generated for you.', 'import', true),
-            card('Whole new building', 'Build a new house on a grid: rooms, doors, windows, stairs, levels and a roof.', 'grid', false),
+            link('A building in the game', 'Find it by its name or on the map and click it in 3D. Its model, textures, collision, detail models and placement are pulled from your game, and the steps are done for you where they can be: rooms, doors and windows, lights, names. It stops and tells you when it needs you.', () => go('world.html?pick=1' + (nameIn.value.trim() ? '&project=' + encodeURIComponent(nameIn.value.trim()) : '')), true),
+            card('Building files you already have', 'Import a building\'s model files (.ydr, .ytd, .ybn, .ymap) yourself; the same guided steps follow.', 'import', false),
+            card('A new building from scratch', 'Build a new house on a grid: rooms, doors, windows, stairs, levels and a roof.', 'grid', false),
+            el('button', { class: 'btn', style: { display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', marginTop: '8px', whiteSpace: 'normal' }, onclick: () => { closeModal(); try { sessionStorage.setItem('mlo.noauto', '1'); } catch (e) { } location.href = 'interiors.html?new=' + encodeURIComponent(nameIn.value.trim()); } },
+                el('div', { style: { fontWeight: 700 } }, 'A game interior (casino, apartment, office...)'), el('div', { style: { fontWeight: 400, fontSize: '12px', opacity: 0.85, marginTop: '3px' } }, 'Copy a Rockstar interior to any place as an MLO you can walk into, or join several of them, like all the pieces of the casino, into one big MLO. Uses the game\'s own models: nothing is copied but the layout and the collision.')),
             el('div', { class: 'foot' }, opts.back ? el('button', { class: 'btn', onclick: () => opts.back() }, 'Back') : (opts.noCancel ? el('button', { class: 'btn', onclick: () => projectsDialog() }, 'Open an existing project') : el('button', { class: 'btn', onclick: closeModal }, 'Cancel')))), { sticky: !!(opts.back || opts.noCancel) });
         setTimeout(() => nameIn.focus(), 30);
     }
     // ---------- the project list: cards with a picture, the kind, when it was opened and edited; open, rename, duplicate, delete ----------
-    const KIND = { import: 'Interior in an imported model', grid: 'New building', vanilla: 'House (older kind)' };
+    const KIND = { import: 'Interior in an imported model', grid: 'New building', vanilla: 'House (older kind)', combo: 'The game\'s own interiors' };
     function ago(iso) {
         if (!iso) return ''; const d = new Date(iso), s = (Date.now() - d.getTime()) / 1000;
         if (s < 60) return 'just now'; if (s < 3600) return Math.round(s / 60) + ' min ago'; if (s < 86400) return Math.round(s / 3600) + ' h ago';
@@ -346,7 +380,7 @@ window.MLO = window.MLO || {};
         const plist = projectCards(list, { current: '', rerender: startDialog, open: async (name) => { closeModal(); try { await Model.openProject(name); } catch (e) { toast('Could not open it: ' + e.message, 'err'); startDialog(); } } });
         modal(el('div', { class: 'dlg wide' }, el('h2', null, 'MLO Creator'), el('div', { class: 'note' }, list.length ? 'Open a project, or start a new one.' : 'Start your first project.'), plist,
             el('label', { class: 'chk' }, el('input', { type: 'checkbox', checked: auto ? true : null, onchange: (e) => { try { localStorage.setItem('mlo.autoopen', e.target.checked ? '1' : '0'); } catch (err) { } } }), 'Open the last project automatically when the program starts'),
-            el('div', { class: 'foot' }, el('button', { class: 'btn primary', onclick: () => newProjectDialog({ back: startDialog }) }, 'New project...'))), { sticky: true });
+            el('div', { class: 'foot' }, el('button', { class: 'btn', title: 'Your server\'s MLOs on the map: what is encrypted and what overlaps', onclick: () => { try { sessionStorage.setItem('mlo.noauto', '1'); } catch (e) { } location.href = 'world.html'; } }, 'Server and world'), el('button', { class: 'btn primary', onclick: () => newProjectDialog({ back: startDialog }) }, 'New project...'))), { sticky: true });
     }
     // a copy of the open project (with its imported files) under another name; the copy is opened
     function saveAsDialog() {
@@ -362,7 +396,7 @@ window.MLO = window.MLO || {};
         let list = []; try { list = await Model.listProjects(); } catch (e) { toast(e.message, 'err'); }
         const plist = projectCards(list, { current: Model.safeName(S.project.name), rerender: projectsDialog, open: async (name) => { closeModal(); try { await Model.openProject(name); } catch (e) { toast('Could not open it: ' + e.message, 'err'); } } });
         modal(el('div', { class: 'dlg wide' }, el('h2', null, 'Projects'), plist,
-            el('div', { class: 'foot' }, el('button', { class: 'btn primary', onclick: () => newProjectDialog() }, 'New project...'), el('button', { class: 'btn', title: 'Save a copy of the open project under another name', onclick: () => saveAsDialog() }, 'Save as...'), el('button', { class: 'btn', onclick: closeModal }, 'Close'))));
+            el('div', { class: 'foot' }, el('button', { class: 'btn', title: 'Your server\'s MLOs on the map: what is encrypted and what overlaps', onclick: async () => { try { await Model.save(); } catch (e) { } try { sessionStorage.setItem('mlo.noauto', '1'); } catch (e) { } location.href = 'world.html'; } }, 'Server and world'), el('button', { class: 'btn primary', onclick: () => newProjectDialog() }, 'New project...'), el('button', { class: 'btn', title: 'Save a copy of the open project under another name', onclick: () => saveAsDialog() }, 'Save as...'), el('button', { class: 'btn', onclick: closeModal }, 'Close'))));
     }
     function helpDialog() {
         const rows = [['Left mouse', 'Use the current tool'], ['Middle-drag / right-drag', 'Orbit the camera (like Blender)'], ['Shift+middle-drag / Shift+right-drag', 'Pan'], ['Ctrl+middle-drag / wheel', 'Zoom'], ['Keypad 1 / 3 / 7', 'Front / right / top view (Ctrl: opposite side). Home: frame everything'], ['G / J / H', 'Imported-model projects: raise or lower the rooms, fill gaps, stand a 1.8 m figure in the scene (R turns it)'], ['C', 'Imported-model projects: cutaway, hides the roof and upper walls of the model (it also happens by itself with the Door and Window tools)'], ['V, then click a room', 'Drag an edge or corner to resize, the inside to move (Shift: no snapping). Del or X removes it, Esc deselects'], ['W A S D / arrows', 'Move the camera'], ['Q / E', 'Turn the view 90°'], ['T', 'Top-down view'],

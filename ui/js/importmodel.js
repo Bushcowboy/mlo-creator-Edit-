@@ -50,7 +50,10 @@ window.MLO = window.MLO || {};
         IM.lines = null; IM.orig = null; IM.origD = null; IM.adj = {}; IM.isl = {}; IM.partGeo = null; IM._syncKey = null; IM._weld = null; IM.colInside = null; IM.colPolys = null; IM.cutVer = (IM.cutVer || 0) + 1;
         if (M.App.renderer) { M.App.renderer.setModelBatches([]); M.App.renderer.resetImgTextures(); }
         if (M.FitModels) M.FitModels.reset();
+        if (M.TEX.clearModel) M.TEX.clearModel();                                                 // (the model's textures in the paint bench belong to this project)
     };
+    // the "repeats every" typed for a texture of the model is kept in the project (import.texTile: { texture name: metres })
+    M.TEX.modelTile = (src) => { const t = S.project && S.project.import && S.project.import.texTile; return t && t[src] ? +t[src] : 0; };
 
     IM.refreshFiles = async function () {
         const r = await Model.api('import/files?name=' + safe()); IM.files = r.files || [];
@@ -65,6 +68,7 @@ window.MLO = window.MLO || {};
             const r = await Model.api('import/model?name=' + safe() + '&target=' + encodeURIComponent(P.import.target || ''));
             IM.files = r.files || []; IM.entities = r.entities || []; IM.log = r.log || [];
             IM.textures = {}; (r.textures || []).forEach(t => { IM.textures[t.name] = { w: t.w, h: t.h, rgba: bytes(t.rgba) }; });
+            IM.texInfo = r.texInfo || []; IM.modelTex = M.TEX.loadModel(IM.texInfo, IM.textures);          // the model's own textures, to paint the interior with (Paint tab)
             IM.models = (r.models || []).map(m => ({
                 file: m.file, target: !!m.target, bmin: m.bmin, bmax: m.bmax, tris: m.tris,
                 geoms: m.geoms.map(g => ({ g: g.g, tex: (g.tex || '').toLowerCase(), texName: g.tex, shader: g.shader, bucket: g.bucket, tris: g.tris, pos: f32(g.pos), nrm: f32(g.nrm), uv: f32(g.uv), idx: u16(g.idx) }))
@@ -78,6 +82,7 @@ window.MLO = window.MLO || {};
             IM._placeKey = null; IM.applyPlaces();
             IM.segment(); IM.rebuildMembers();
             IM.loaded = true; IM.rebuild(); IM.requestCollision(); IM.autoPlaces();
+            if (IM.modelTex && M.App.remesh) M.App.remesh();                                            // (walls painted with the model's textures show them now)
             if (M.FitModels) M.FitModels.loadLib();                                                     // the window and door models (.glb files) of the project
             if (imp().cutters.length || imp().deletes.length || (imp().fills || []).length || IM.clearSpec()) IM.requestCut();
         } catch (e) { IM.error = e.message; toast('Could not read the model files: ' + e.message, 'err'); M.Errors.report('loading', e, { quiet: true }); }

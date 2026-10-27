@@ -399,7 +399,7 @@ namespace MloCreator
                 return;
             }
             if (path == "/") path = "/index.html";
-            string full = Path.GetFullPath(Path.Combine(UiDir, path.TrimStart('/').Replace('/', '\\')));
+            string full = Path.GetFullPath(Path.Combine(UiDir, path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)));
             if (!full.StartsWith(UiDir, StringComparison.OrdinalIgnoreCase) || !File.Exists(full)) { Reply(c, 404, "not found", "text/plain"); return; }
             if (Path.GetExtension(full).Equals(".html", StringComparison.OrdinalIgnoreCase))          // (every page gets the token: the editor and the interiors page)
             {

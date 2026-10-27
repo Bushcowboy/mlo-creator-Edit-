@@ -14,7 +14,7 @@ window.MLO = window.MLO || {};
     const kb = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
 
     const TOOLS = [['building', 'Select building', 'B'], ['frame', 'Frame', 'O'], ['level', 'Raise / lower rooms', 'G'], ['room', 'Add room', '1'], ['cut', 'Cut out', '2'], ['fill', 'Fill gaps', 'J'], ['part', 'Partition', '3'], ['door', 'Door', '4'], ['window', 'Window', '5'], ['arch', 'Archway', '6'], ['fit', 'Window / door models', 'I'], ['plants', 'Props and plants', 'Y'],
-        ['floor', 'Floor paint', '7'], ['light', 'Light', 'L'], ['figure', 'Scale figure', 'H'], ['faces', 'Delete faces', 'F'], ['edges', 'Edges (fill holes)', 'K'], ['parts', 'Model parts', 'P'], ['collision', 'Collision', 'M'], ['cbox', 'Collision box', 'N'], ['walk', 'Walk check', 'U'], ['select', 'Select', 'V'], ['eraser', 'Eraser', 'X']];
+        ['floor', 'Floor paint', '7'], ['light', 'Light', 'L'], ['column', 'Column', '8'], ['beam', 'Beam', '9'], ['furnish', 'Place props', '0'], ['figure', 'Scale figure', 'H'], ['faces', 'Delete faces', 'F'], ['edges', 'Edges (fill holes)', 'K'], ['parts', 'Model parts', 'P'], ['collision', 'Collision', 'M'], ['cbox', 'Collision box', 'N'], ['walk', 'Walk check', 'U'], ['select', 'Select', 'V'], ['eraser', 'Eraser', 'X']];
     // What each tool does in one line (the tool list shows it; the long text is in HELP).
     const SUM = {
         building: 'Pick one building out of the block.', frame: 'Square the grid to a wall and set the floor.', level: 'Raise or lower the rooms against the model.',
@@ -22,6 +22,8 @@ window.MLO = window.MLO || {};
         door: 'Cut a door out of the model and put the door in.', window: 'Cut a window out of the model and put glass in.', arch: 'Cut a wide opening with a box.', fit: 'Place window and door models (.glb) by hand with a move / size / turn gizmo.', plants: 'Click props, plants and small model pieces in the view and remove them.',
         faces: 'Select faces like in Blender (click, box, A, L), then delete them: fake doors, painted windows, grilles.', parts: 'See each texture of the model and remove or restore a whole one.', collision: 'Pick pieces of the building\'s invisible collision and delete them.', cbox: 'Build your own collision: boxes with a surface type.', walk: 'Walk a player through the interior and list what blocks or leaks.', edges: 'Select the rim of a hole in the wall and fill it with faces.',
         floor: 'Paint a floor texture on part of the floor.', light: 'Hang a ceiling light.',
+        column: 'Stand a column (square or round) from the floor to the ceiling.', beam: 'Draw a beam under the ceiling, from one point to another.',
+        furnish: 'Place the game\'s props inside, suggested from your files, the building\'s surroundings and the game\'s interiors.',
         select: 'Select a room or opening to move, resize or edit it.', eraser: 'Remove a cutter, light, wall or opening.', figure: 'Stand a person in the room to judge sizes.'
     };
     // ---- The route: the stages in the order you do them. A row of the list is one job; where a job has a few ways to do it (a door, a window or an archway; add a room
@@ -42,6 +44,8 @@ window.MLO = window.MLO || {};
         collision: { name: 'Collision', sum: 'The invisible part: delete the building\'s collision that blocks you, or build your own boxes.', vars: [['collision', 'Delete pieces', 'M'], ['cbox', 'Build boxes', 'N']] },
         floor: { name: 'Floor paint', vars: [['floor', 'Floor paint', '7']] },
         light: { name: 'Lights', sum: 'Hang a ceiling light.', vars: [['light', 'Lights', 'L']] },
+        furnish: { name: 'Place props', sum: 'Furnish the interior with the game\'s props (or models of yours): suggested from your imported files, what the game places around the building, its archive and the game\'s interiors.', vars: [['furnish', 'Place props', '0']] },
+        struct: { name: 'Columns and beams', sum: 'Columns from floor to ceiling, beams under it. A room\'s ceiling shape (vaulted, barrel, tray) is set when the room is selected.', vars: [['column', 'Column', '8'], ['beam', 'Beam', '9']] },
         walk: { name: 'Walk check', vars: [['walk', 'Walk check', 'U']] },
         figure: { name: 'Scale figure', vars: [['figure', 'Scale figure', 'H']] }
     };
@@ -53,7 +57,7 @@ window.MLO = window.MLO || {};
         { id: 'open', name: 'Doors and windows', note: 'Cut the doors and windows out of the building\'s wall so you can walk in and see out. Nothing is cut for you: you pick the faces, or place a model with the gizmo.', rows: ['opening', 'models'], steps: ['open', 'portal'] },
         { id: 'repair', name: 'Clean up the model', note: 'Take out what is in the way: fake doors, painted-on windows, vents, solid collision. Then close the holes that leaves.', rows: ['faces', 'parts', 'edges', 'collision'], steps: ['col', 'colclear'] },
         { id: 'props', name: 'Props and small removals', note: 'Props, plants and small model pieces that are in the way. Click one in the view and remove it.', rows: ['plants'], steps: ['plants'] },
-        { id: 'finish', name: 'Finish the inside', note: 'Paint the floor and hang the lights. Nothing is lit unless you place a light.', rows: ['floor', 'light'], steps: ['lights'] },
+        { id: 'finish', name: 'Finish the inside', note: 'Paint the floor and hang the lights. Nothing is lit unless you place a light.', rows: ['floor', 'light', 'struct', 'furnish'], steps: ['lights'] },
         { id: 'check', name: 'Check it', note: 'Walk a player-sized capsule through the interior before you export, and judge sizes with a person.', rows: ['walk', 'figure'], steps: ['walk'] },
         { id: 'export', name: 'Export', note: 'Name the resource and export it. The Export tab says how to put it on your server.', tab: 'export', rows: [], steps: ['prefix'] }
     ];
@@ -232,6 +236,7 @@ window.MLO = window.MLO || {};
 
     UI2.renderImport = function (root) {
         const P = S.project, I = P.import, k = kit();
+        if (M.Guide) M.Guide.importBlock(root);                    // (a building of the game: found by name or picked in 3D, everything it needs pulled)
         // the blocks of the tab; each one goes into a dropdown section at the end, in the order you need them
         const blkFiles = (root) => {
         root.append(el('div', { class: 'note' }, 'Import the model of the building you want to put an interior into: its .ydr, and if you have them its .ytd textures, .ybn collision and the .ymap that places it. Nothing is read from the game unless you press the lookup button below.'));
@@ -431,6 +436,8 @@ window.MLO = window.MLO || {};
         if (t === 'door') doorChooser(root);
         if (t === 'fit') M.FitModels.panel(root);
         if (t === 'plants') M.Plants.toolPanel(root);
+        if ((t === 'column' || t === 'beam') && M.Structure) M.Structure.toolPanel(root, t);
+        if (t === 'furnish' && M.Props) M.Props.toolPanel(root);
         if (t === 'figure') {
             const f = S.figure;
             if (!f) {
@@ -638,6 +645,7 @@ window.MLO = window.MLO || {};
                 numField('Width', () => f2(o.r[2] - o.r[0]), v => setR(r => { r[2] = r3(r[0] + Math.max(0.2, v)); }), '0.05', 'm'),
                 numField('Depth', () => f2(o.r[3] - o.r[1]), v => setR(r => { r[3] = r3(r[1] + Math.max(0.2, v)); }), '0.05', 'm'));
             root.append(el('div', { class: 'row' }, el('button', { class: 'btn sm danger', onclick: () => IT.deleteRoom() }, 'Delete')));
+            if (o.op === 'add' && M.Structure) M.Structure.roomCeiling(root, oi);
         }
 
         // lists, each one a dropdown
@@ -798,7 +806,7 @@ window.MLO = window.MLO || {};
         return el('div', { class: 'row', style: { alignItems: 'flex-start', gap: '6px' } }, el('span', { style: { color: col, width: '12px', flex: 'none' } }, mark),
             el('div', { class: 'grow' }, el('div', { style: { color: col } }, s.title), s.done ? null : el('div', { class: 'note' }, s.why)), s.done ? null : el('button', { class: 'btn sm', onclick: () => goStep(s) }, 'Go'));
     }
-    UI2.steps = steps;
+    UI2.steps = steps; UI2.useEntity = (e, src) => useEntity(e, src); UI2.afterFilesChanged = () => afterFilesChanged();
     UI2.renderChecklist = function (root, compact) {
         // the progress counts what is needed; the optional steps (the walk check, picking the building) are listed under "All steps" and never block anything
         const list = steps(), need = list.filter(s => s.sev !== 'opt'), done = need.filter(s => s.done).length, next = list.find(s => !s.done && s.sev !== 'opt');
@@ -852,16 +860,13 @@ window.MLO = window.MLO || {};
     }
     function safeRes(s) { return (s || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40); }
     // the prefix of a building's files: the project's prefix for the first building, the prefix and the building's number for the others (a building keeps its number)
-    function prefixOf(P, rec) { const sfx = (rec && rec.sfx && P.import.buildings.length > 1) ? rec.sfx : '', base = (P.prefix || 'mlo').slice(0, 10 - sfx.length); return base + sfx; }       // (a project with one building uses the plain prefix)
+    function prefixOf(P, rec) { const sfx = (rec && rec.sfx && P.import.buildings.length > 1) ? rec.sfx : '', N = Model.exportNames(P), base = (N.prefix || 'mlo').slice(0, 36); return sfx ? base + '_' + sfx : base; }       // (a project with one building uses the plain prefix; developer_project, then developer_project_2...)
     const hasRooms = (d) => d.shell.ops.some(o => o.op === 'add');
     let ex = {};
     UI2.renderExport = function (root) {
         const P = S.project, X = P.export, I = P.import, k = kit(); ex = {};
         const text = (key, ph) => el('input', { type: 'text', class: 'grow', value: X[key] || '', placeholder: ph || '', oninput: (e) => { X[key] = e.target.value; Model.touch(); } });
-        root.append(el('div', { class: 'h' }, 'Resource'));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Folder'), text('resource', 'mlo_' + (safeRes(P.name) || 'house'))));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Prefix'), el('input', { type: 'text', class: 'grow', value: P.prefix, maxlength: 8, title: 'Every model in the pack starts with this. Keep it unique on your server. The second building adds a 2, the third a 3...', oninput: (e) => { P.prefix = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8); Model.touch(); } })));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Label'), text('label', P.name)));
+        M.UI.renderNames(root, text);
         const stepsNow = steps(), stepsOpen = stepsNow.filter(s => !s.done && s.sev !== 'opt').length;
         sec(root, 'e.steps', 'Before you export', { sum: stepsOpen ? stepsOpen + ' to do' : 'all done', open: stepsOpen > 0 }, (b) => UI2.renderChecklist(b, false));
         // what goes into the resource
@@ -910,13 +915,13 @@ window.MLO = window.MLO || {};
         ex.log.innerHTML = ''; ex.after.style.display = 'none';
         if (!IM.targetModel()) { toast('Import the model first.', 'warn'); return; }
         if (!placement(P)) { toast('Set where the model stands in the game first (Import tab).', 'warn'); return; }
-        if (!P.prefix) { toast('Give the project a prefix first.', 'warn'); return; }
+        const N = Model.exportNames(P); if (!N.prefix) { toast('Give the project a prefix first.', 'warn'); return; }
         const all = Model.bldAll(P), todo = all.filter(b => hasRooms(b.d));
         if (!todo.length) { toast('No building has a room yet: add a room first.', 'warn'); return; }
         // a step that matters is still open (no opening, grid never set): say so before writing files (the steps are those of the building being worked on)
         const open = UI2.steps().filter(s => !s.done && s.sev !== 'opt'), musts = open.filter(s => s.sev === 'must');
         if (musts.length && !(await M.UI.confirm('Not everything is done', 'Still open' + (all.length > 1 ? ' in "' + (all.find(b => b.active) || {}).name + '"' : '') + ': ' + musts.map(s => s.title).join('; ') + '.' + (open.length > musts.length ? ' Also missing: ' + open.filter(s => s.sev === 'should').map(s => s.title.toLowerCase()).join('; ') + '.' : '') + ' The result may not work in the game.', 'Export anyway'))) return;
-        const resource = safeRes(X.resource) || ('mlo_' + (safeRes(P.name) || 'house'));
+        const resource = N.resource;
         M.Errors.crumb('export "' + resource + '"');
         ex.btn.disabled = true; ex.btn.textContent = 'Exporting...';
         try {
@@ -942,7 +947,9 @@ window.MLO = window.MLO || {};
                 const doors = []; if (dmod) BI.cutters.filter(k => k.leaf).forEach(k => IM.doorTransforms(k).forEach(t => doors.push({ x: t.x, y: t.y, z: t.z, heading: t.yaw * 180 / Math.PI, sxy: t.sxy, sz: t.sz })));        // two leaves for double doors
                 if (doors.length) log(tag + 'Doors placed with ' + dmod.name + ': ' + doors.length);
                 const m = Mesher.toExport(BP, built, { light: {}, model: { resource, prefix: prefixOf(BP, rec), label: many ? b.name : (X.label || BP.name), timecycle: 'hash_E83C53FC', placement: { x: pl.x, y: pl.y, heading: pl.heading, z: pl.z }, entranceNote: 'test spot inside the interior: ' + tp, outDir: X.outDir || undefined,
-                    doors, doorModel: doors.length ? { name: dmod.name, include: !!dmod.include, project: BP.name } : undefined, fitted: M.FitModels.exportSpec(BP) } });
+                    doors, doorModel: doors.length ? { name: dmod.name, include: !!dmod.include, project: BP.name } : undefined, fitted: M.FitModels.exportSpec(BP),
+                    props: M.Props ? M.Props.exportList(BP) : undefined, propProject: Model.safeName(BP.name) } });
+                if (m.props && m.props.length) log(tag + 'Props placed: ' + m.props.length);
                 models.push(m); tps.push({ name: b.name, tp }); occSets.push({ rects: Shell.regionRects(BP.shell), place: { x: pl.x, y: pl.y, heading: pl.heading } });
             }));
             if (!models.length) { log('Nothing to export.', 'bad'); ex.btn.disabled = false; ex.btn.textContent = 'Export resource'; return; }
@@ -969,7 +976,7 @@ window.MLO = window.MLO || {};
     }
 
     UI2.renderLeft = function (root) {
-        if (S.tab === 'import' || S.tab === 'build') UI2.renderChecklist(root, true);
+        if (S.tab === 'import' || S.tab === 'build') { if (M.Guide) M.Guide.render(root); else UI2.renderChecklist(root, true); }
         if (S.tab === 'import') UI2.renderImport(root); else if (S.tab === 'build') UI2.renderBuild(root); else if (S.tab === 'paint') M.VanillaUI.renderPaint(root); else UI2.renderExport(root);
     };
     UI2.refresh = function () { M.UI.renderLeft(); M.UI.renderRight(); };

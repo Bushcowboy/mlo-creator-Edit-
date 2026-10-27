@@ -22,18 +22,20 @@ window.MLO = window.MLO || {};
         return s / tot;
     }
 
-    // ---------- pattern functions: (u, v in 0..1) -> [r,g,b] ----------
+    // ---------- pattern functions: (u, v in 0..1) -> [r, g, b, height] ----------
+    // height 0..1 (1 = the face of a brick, a tile, a plank; 0 = the mortar, grout or gap between them): the normal map and the specular map are made from it
     const K = {
         flat(u, v, p) {
             const n = fbm(u, v, 3, p.seed || 5), g = vnoise(u * SIZE / 2, v * SIZE / 2, SIZE / 2, (p.seed || 5) + 3);
             let k = 1 + (n - 0.5) * (p.amp != null ? p.amp : 0.05) + (g - 0.5) * (p.grain != null ? p.grain : 0.03);
-            if (p.pits && hash(Math.floor(u * SIZE), Math.floor(v * SIZE), 91) < p.pits) k *= 0.8;
-            return [p.base[0] * k, p.base[1] * k, p.base[2] * k];
+            let h = 0.5 + (n - 0.5) * 0.5 + (vnoise(u * 32, v * 32, 32, (p.seed || 5) + 9) - 0.5) * 0.25;          // (the bumps: softer than the colour grain)
+            if (p.pits && hash(Math.floor(u * SIZE), Math.floor(v * SIZE), 91) < p.pits) { k *= 0.8; h = 0.1; }
+            return [p.base[0] * k, p.base[1] * k, p.base[2] * k, h];
         },
         carpet(u, v, p) {
             const g = vnoise(u * SIZE, v * SIZE, SIZE, 17), g2 = vnoise(u * SIZE / 3, v * SIZE / 3, SIZE / 3, 21), n = fbm(u, v, 4, 33);
             const k = 1 + (g - 0.5) * 0.16 + (g2 - 0.5) * 0.06 + (n - 0.5) * 0.06;
-            return [p.base[0] * k, p.base[1] * k, p.base[2] * k];
+            return [p.base[0] * k, p.base[1] * k, p.base[2] * k, 0.5 + (n - 0.5) * 0.5 + (vnoise(u * 48, v * 48, 48, 23) - 0.5) * 0.3];          // (a soft pile: per-pixel noise would shimmer)
         },
         brick(u, v, p) {
             const ry = v * p.rows, r = Math.floor(ry), fv = ry - r;
@@ -43,11 +45,12 @@ window.MLO = window.MLO || {};
             const bw = SIZE / p.cols, bh = SIZE / p.rows, mw = (p.mw || 2) * 0.5;
             const du = Math.min(fu, 1 - fu) * bw, dv = Math.min(fv, 1 - fv) * bh;
             const g = vnoise(u * SIZE / 2, v * SIZE / 2, SIZE / 2, 7);
-            if (du < mw || dv < mw) { const k = 1 + (g - 0.5) * 0.08; return [p.mortar[0] * k, p.mortar[1] * k, p.mortar[2] * k]; }
-            const vary = p.vary != null ? p.vary : 0.12;
-            let k = 1 + (hash(cw, rw, 41) - 0.5) * 2 * vary + (fbm(u, v, 4, 13) - 0.5) * 0.10 + (g - 0.5) * 0.06;
+            if (du < mw || dv < mw) { const k = 1 + (g - 0.5) * 0.08; return [p.mortar[0] * k, p.mortar[1] * k, p.mortar[2] * k, 0.08 + g * 0.08]; }
+            const vary = p.vary != null ? p.vary : 0.12, f = fbm(u, v, 4, 13);
+            let k = 1 + (hash(cw, rw, 41) - 0.5) * 2 * vary + (f - 0.5) * 0.10 + (g - 0.5) * 0.06;
+            const edge = Math.min(1, Math.min(du, dv) - mw) / 1.6;                                 // (the brick's edge rounds down to the mortar)
             if (du < mw + 1.2 || dv < mw + 1.2) k *= 0.93;
-            return [p.base[0] * k, p.base[1] * k, p.base[2] * k];
+            return [p.base[0] * k, p.base[1] * k, p.base[2] * k, 0.55 + 0.35 * Math.min(1, edge) + (f - 0.5) * 0.2];
         },
         plank(u, v, p) {
             const n = p.n || 6, pu = u * n, pi = Math.floor(pu), fu = pu - pi;
@@ -55,9 +58,9 @@ window.MLO = window.MLO || {};
             const sid = ((sj % segs) + segs) % segs;
             const tone = 0.90 + hash(pi, sid, 43) * 0.20;
             const grain = vnoise(u * 14, v * 14, 14, 7 + pi), streak = vnoise(u * 30, v * 30, 30, 61 + pi);
-            let k = tone * (0.95 + (grain - 0.5) * 0.10 + (streak - 0.5) * 0.06);
-            if (fu < 0.03 || fu > 0.97 || fv < 0.012 || fv > 0.988) k *= 0.66;
-            return [p.base[0] * k, p.base[1] * k, p.base[2] * k];
+            let k = tone * (0.95 + (grain - 0.5) * 0.10 + (streak - 0.5) * 0.06), h = 0.7 + (streak - 0.5) * 0.15;
+            if (fu < 0.03 || fu > 0.97 || fv < 0.012 || fv > 0.988) { k *= 0.66; h = 0.1; }
+            return [p.base[0] * k, p.base[1] * k, p.base[2] * k, h];
         },
         tile(u, v, p) {
             const n = p.n || 4, tu = u * n, tv = v * n, ti = Math.floor(tu), tj = Math.floor(tv), fu = tu - ti, fv = tv - tj;
@@ -66,8 +69,8 @@ window.MLO = window.MLO || {};
             const colr = p.b && ((ti + tj) & 1) ? p.b : p.base;
             const vari = 0.97 + hash(ti % n, tj % n, 77) * 0.06;
             const k = vari * (1 + (g - 0.5) * 0.03);
-            if (fu < edge || fu > 1 - edge || fv < edge || fv > 1 - edge) return [p.groutCol[0] * k, p.groutCol[1] * k, p.groutCol[2] * k];
-            return [colr[0] * k, colr[1] * k, colr[2] * k];
+            if (fu < edge || fu > 1 - edge || fv < edge || fv > 1 - edge) return [p.groutCol[0] * k, p.groutCol[1] * k, p.groutCol[2] * k, 0.05];
+            return [colr[0] * k, colr[1] * k, colr[2] * k, 0.85 + (g - 0.5) * 0.04];
         },
         shingle(u, v, p) {
             const rows = p.rows || 10, rv = v * rows, ri = Math.floor(rv), fv = rv - ri;
@@ -77,23 +80,78 @@ window.MLO = window.MLO || {};
             let k = vari * (0.95 + (g - 0.5) * 0.10);
             k *= fv < 0.12 ? 0.62 : (fv > 0.9 ? 1.05 : 1.0);
             if (fu < 0.03 || fu > 0.97) k *= 0.7;
-            return [p.base[0] * k, p.base[1] * k, p.base[2] * k];
+            return [p.base[0] * k, p.base[1] * k, p.base[2] * k, fu < 0.03 || fu > 0.97 ? 0.2 : 0.25 + fv * 0.7];
         },
         corrugated(u, v, p) {
             const ribs = p.ribs || 16, s = Math.sin(u * ribs * Math.PI * 2);
             const g = vnoise(u * SIZE / 2, v * SIZE / 2, SIZE / 2, 35), n = fbm(u, v, 3, 37);
             const k = (0.86 + 0.14 * s) * (1 + (g - 0.5) * 0.05 + (n - 0.5) * 0.08);
-            return [p.base[0] * k, p.base[1] * k, p.base[2] * k];
+            return [p.base[0] * k, p.base[1] * k, p.base[2] * k, 0.5 + 0.45 * s];
         },
         panel(u, v, p) {
             const base = K.flat(u, v, p), np = p.n || 2, fu = (u * np) % 1, fv = (v * np) % 1;
             const du = Math.min(fu, 1 - fu) * SIZE / np, dv = Math.min(fv, 1 - fv) * SIZE / np;
-            let k = 1;
-            if (du < 1.6 || dv < 1.6) k = 0.72;
+            let k = 1, h = base[3];
+            if (du < 1.6 || dv < 1.6) { k = 0.72; h = 0.1; }
             // tie holes
             const hx = (fu - 0.12) * SIZE / np, hy = (fv - 0.12) * SIZE / np;
-            if (hx * hx + hy * hy < 5) k = 0.65;
-            return [base[0] * k, base[1] * k, base[2] * k];
+            if (hx * hx + hy * hy < 5) { k = 0.65; h = 0.05; }
+            return [base[0] * k, base[1] * k, base[2] * k, h];
+        },
+        // marble: soft veins through a polished slab, joints between slabs
+        marble(u, v, p) {
+            const n = fbm(u, v, 3, p.seed || 71), w = fbm(u + n * 0.7, v + n * 0.5, 2, (p.seed || 71) + 5);
+            const vein = Math.pow(1 - Math.abs(Math.sin((u * 2 + v * 1.3 + w * 3.2) * Math.PI)), p.sharp || 12);
+            const t = Math.min(1, vein * 0.9 + (n - 0.5) * 0.15), c0 = p.base, c1 = p.vein;
+            const ns = p.n || 2, fu = (u * ns) % 1, fv = (v * ns) % 1, joint = Math.min(fu, 1 - fu, fv, 1 - fv) * SIZE / ns < 0.8;
+            if (joint) return [c0[0] * 0.8, c0[1] * 0.8, c0[2] * 0.8, 0.3];
+            return [c0[0] + (c1[0] - c0[0]) * t, c0[1] + (c1[1] - c0[1]) * t, c0[2] + (c1[2] - c0[2]) * t, 0.9];
+        },
+        // terrazzo: chips of stone in a cement ground
+        terrazzo(u, v, p) {
+            const cells = 22, gu = u * cells, gv = v * cells, ci = Math.floor(gu), cj = Math.floor(gv);
+            let best = 9, id = 0;
+            for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+                const x = ci + dx, y = cj + dy, wx = ((x % cells) + cells) % cells, wy = ((y % cells) + cells) % cells;
+                const px = x + hash(wx, wy, 3), py = y + hash(wx, wy, 5), d = Math.hypot(gu - px, gv - py) / (0.25 + hash(wx, wy, 9) * 0.3);
+                if (d < best) { best = d; id = hash(wx, wy, 11); }
+            }
+            const g = vnoise(u * SIZE / 2, v * SIZE / 2, SIZE / 2, 15), k = 1 + (g - 0.5) * 0.05;
+            if (best < 1) { const c = p.chips[Math.floor(id * p.chips.length) % p.chips.length]; return [c[0] * k, c[1] * k, c[2] * k, 0.88]; }
+            return [p.base[0] * k, p.base[1] * k, p.base[2] * k, 0.84];
+        },
+        // herringbone parquet: short planks at right angles
+        herringbone(u, v, p) {
+            const n = p.n || 4, x = u * n * 2, y = v * n * 2, row = Math.floor(y - x), col = Math.floor(x + y), up = (((row + col) % 2) + 2) % 2;
+            const a = up ? (x + y) / 2 : (y - x) / 2, along = (a - Math.floor(a));
+            const fx = up ? (y - x) - Math.floor(y - x) : (x + y) - Math.floor(x + y), fa = (((along * 2) % 1) + 1) % 1;
+            const tone = 0.88 + hash(row & 63, col & 63, 13) * 0.22, grain = vnoise(u * 40, v * 40, 40, 7), k = tone * (0.95 + (grain - 0.5) * 0.12);
+            if (fx < 0.05 || fx > 0.95 || fa < 0.02 || fa > 0.98) return [p.base[0] * k * 0.6, p.base[1] * k * 0.6, p.base[2] * k * 0.6, 0.1];
+            return [p.base[0] * k, p.base[1] * k, p.base[2] * k, 0.75];
+        },
+        // wallpaper: stripes or a diamond print over a paper grain
+        paper(u, v, p) {
+            const g = vnoise(u * SIZE, v * SIZE, SIZE, 19), k = 1 + (g - 0.5) * 0.03; let c = p.base, h = 0.5 + (vnoise(u * 40, v * 40, 40, 21) - 0.5) * 0.2;
+            if (p.stripes) { const s = (u * p.stripes) % 1; if (s < p.width) { c = p.b; h += 0.05; } }
+            else { const m = p.n || 6, du = Math.abs(((u * m) % 1) - 0.5), dv = Math.abs(((v * m) % 1) - 0.5); if (du + dv < 0.32 && du + dv > 0.22) { c = p.b; h += 0.06; } if (du + dv < 0.08) c = p.b; }
+            return [c[0] * k, c[1] * k, c[2] * k, h];
+        },
+        // a carpet with a printed pattern (hotel and casino carpets)
+        pcarpet(u, v, p) {
+            const base = K.carpet(u, v, p), m = p.n || 4, fu = (u * m) % 1, fv = (v * m) % 1, d = Math.abs(fu - 0.5) + Math.abs(fv - 0.5), r = Math.hypot(fu - 0.5, fv - 0.5);
+            let c = null; if (d > 0.42 && d < 0.5) c = p.b; else if (r < 0.14) c = p.c; else if (r > 0.2 && r < 0.24) c = p.b;
+            if (!c) return base; const k = base[0] / p.base[0]; return [c[0] * k, c[1] * k, c[2] * k, base[3]];
+        },
+        // brushed metal: fine streaks one way
+        brushed(u, v, p) {
+            const s = vnoise(u * 3, v * SIZE, SIZE, 27), s2 = vnoise(u * 9, v * SIZE / 2, SIZE / 2, 29), k = 0.93 + (s - 0.5) * 0.14 + (s2 - 0.5) * 0.06;
+            return [p.base[0] * k, p.base[1] * k, p.base[2] * k, 0.5 + (vnoise(u * 3, v * 64, 64, 31) - 0.5) * 0.25];
+        },
+        // wainscot / beadboard: vertical boards with grooves
+        bead(u, v, p) {
+            const n = p.n || 8, fu = (u * n) % 1, g = vnoise(u * SIZE / 2, v * SIZE / 2, SIZE / 2, 33), k = 1 + (g - 0.5) * 0.03;
+            const groove = fu < 0.05 ? 0.15 : (fu < 0.1 ? 0.6 : 0.85), dark = fu < 0.05 ? 0.78 : 1;
+            return [p.base[0] * k * dark, p.base[1] * k * dark, p.base[2] * k * dark, groove];
         }
     };
 
@@ -142,14 +200,48 @@ window.MLO = window.MLO || {};
         ['carpet_blue', 'Blue-Grey Carpet', 'Carpet', 1.0, 'carpet', { base: C(96, 110, 128) }],
         ['carpet_red', 'Wine Carpet', 'Carpet', 1.0, 'carpet', { base: C(124, 70, 72) }],
         ['metal_sheet', 'Corrugated Steel', 'Metal', 1.0, 'corrugated', { base: C(150, 154, 156), ribs: 12 }],
+        ['marble_white', 'White Marble', 'Marble', 1.6, 'marble', { base: C(226, 224, 218), vein: C(150, 150, 154), n: 2, seed: 71 }],
+        ['marble_black', 'Black Marble', 'Marble', 1.6, 'marble', { base: C(34, 34, 38), vein: C(170, 166, 160), n: 2, seed: 73, sharp: 18 }],
+        ['marble_green', 'Green Marble', 'Marble', 1.6, 'marble', { base: C(40, 70, 58), vein: C(170, 190, 176), n: 2, seed: 77 }],
+        ['marble_cream', 'Cream Marble', 'Marble', 1.6, 'marble', { base: C(214, 198, 170), vein: C(170, 140, 110), n: 2, seed: 79 }],
+        ['terrazzo_grey', 'Grey Terrazzo', 'Marble', 1.2, 'terrazzo', { base: C(178, 176, 170), chips: [C(90, 90, 92), C(220, 218, 212), C(140, 120, 100), C(60, 62, 66)] }],
+        ['terrazzo_warm', 'Warm Terrazzo', 'Marble', 1.2, 'terrazzo', { base: C(206, 190, 170), chips: [C(170, 110, 80), C(240, 232, 220), C(120, 90, 70), C(90, 80, 72)] }],
+        ['concrete_polished', 'Polished Concrete', 'Concrete', 2.0, 'flat', { base: C(150, 150, 148), amp: 0.14, grain: 0.03, seed: 59 }],
+        ['wood_herring_oak', 'Oak Herringbone', 'Wood', 1.2, 'herringbone', { n: 4, base: C(172, 132, 90) }],
+        ['wood_herring_walnut', 'Walnut Herringbone', 'Wood', 1.2, 'herringbone', { n: 4, base: C(104, 72, 50) }],
+        ['wood_bead_white', 'White Beadboard', 'Wood', 1.0, 'bead', { n: 8, base: C(226, 224, 216) }],
+        ['wood_bead_green', 'Green Beadboard', 'Wood', 1.0, 'bead', { n: 8, base: C(90, 112, 96) }],
+        ['paper_stripe_cream', 'Cream Stripe Paper', 'Wallpaper', 1.0, 'paper', { base: C(222, 212, 190), b: C(200, 186, 160), stripes: 8, width: 0.5 }],
+        ['paper_stripe_green', 'Green Stripe Paper', 'Wallpaper', 1.0, 'paper', { base: C(76, 100, 82), b: C(96, 122, 100), stripes: 10, width: 0.4 }],
+        ['paper_diamond_navy', 'Navy Diamond Paper', 'Wallpaper', 0.8, 'paper', { base: C(44, 52, 76), b: C(170, 150, 100), n: 6 }],
+        ['paper_diamond_red', 'Red Diamond Paper', 'Wallpaper', 0.8, 'paper', { base: C(110, 32, 40), b: C(196, 160, 96), n: 6 }],
+        ['carpet_casino_red', 'Casino Carpet Red', 'Carpet', 1.6, 'pcarpet', { base: C(120, 28, 36), b: C(196, 150, 70), c: C(40, 30, 60), n: 4 }],
+        ['carpet_casino_blue', 'Casino Carpet Blue', 'Carpet', 1.6, 'pcarpet', { base: C(30, 44, 90), b: C(200, 160, 80), c: C(120, 30, 40), n: 4 }],
+        ['carpet_hotel_beige', 'Hotel Carpet Beige', 'Carpet', 1.6, 'pcarpet', { base: C(168, 150, 124), b: C(120, 100, 80), c: C(200, 186, 160), n: 5 }],
+        ['metal_brushed', 'Brushed Steel', 'Metal', 1.0, 'brushed', { base: C(176, 178, 182) }],
+        ['metal_brass', 'Brushed Brass', 'Metal', 1.0, 'brushed', { base: C(190, 152, 80) }],
+        ['metal_gold', 'Gold', 'Metal', 1.0, 'brushed', { base: C(212, 170, 76) }],
+        ['metal_black', 'Black Metal', 'Metal', 1.0, 'brushed', { base: C(44, 44, 46) }],
         ['trim_white', 'White Trim', 'Trim', 1.0, 'flat', { base: C(236, 236, 232), amp: 0.01, grain: 0.015, seed: 61 }],
         ['trim_dark', 'Dark Trim', 'Trim', 1.0, 'flat', { base: C(60, 56, 52), amp: 0.02, grain: 0.02, seed: 63 }],
-        ['trim_wood', 'Wood Trim', 'Trim', 1.0, 'flat', { base: C(112, 80, 56), amp: 0.06, grain: 0.04, seed: 65 }]
+        ['trim_wood', 'Wood Trim', 'Trim', 1.0, 'flat', { base: C(112, 80, 56), amp: 0.06, grain: 0.04, seed: 65 }],
+        ['trim_black', 'Black Trim', 'Trim', 1.0, 'flat', { base: C(30, 30, 32), amp: 0.01, grain: 0.015, seed: 67 }],
+        ['trim_gold', 'Gold Trim', 'Trim', 1.0, 'brushed', { base: C(206, 166, 80) }],
+        ['trim_walnut', 'Walnut Trim', 'Trim', 1.0, 'plank', { n: 1, segs: 1, base: C(96, 66, 46) }]
     ];
     // collision surface type by category (values the game's own pack uses)
-    const COL = { Brick: 1, Stone: 1, Concrete: 1, Plaster: 101, Tile: 81, Wood: 72, Roof: 1, Carpet: 101, Metal: 1, Trim: 101 };
+    const COL = { Brick: 1, Stone: 1, Concrete: 1, Plaster: 101, Tile: 81, Wood: 72, Roof: 1, Carpet: 101, Metal: 1, Trim: 101, Marble: 81, Wallpaper: 101 };
+    // how each kind of surface takes light in the game (normal_spec shader): bumpiness of the normal map, specular strength (0..1, then the spec map), and how tight the highlight is
+    const SURF = {
+        Brick: { bump: 1.2, spec: 0.08, fall: 12 }, Stone: { bump: 1.0, spec: 0.12, fall: 20 }, Concrete: { bump: 0.5, spec: 0.12, fall: 25 }, Plaster: { bump: 0.3, spec: 0.06, fall: 12 },
+        Tile: { bump: 0.9, spec: 0.7, fall: 160 }, Wood: { bump: 0.7, spec: 0.35, fall: 60 }, Roof: { bump: 1.0, spec: 0.1, fall: 20 }, Carpet: { bump: 0.7, spec: 0.02, fall: 6 },
+        Metal: { bump: 0.4, spec: 0.9, fall: 140 }, Trim: { bump: 0.3, spec: 0.45, fall: 80 }, Marble: { bump: 0.4, spec: 0.85, fall: 220 }, Wallpaper: { bump: 0.4, spec: 0.08, fall: 14 },
+        Mine: { bump: 0.6, spec: 0.2, fall: 40 }
+    };
+    // polished versions of a material's own SURF (concrete_polished is shiny although concrete is not)
+    const SURF_ID = { concrete_polished: { bump: 0.3, spec: 0.7, fall: 180 }, wood_white: { bump: 0.6, spec: 0.25, fall: 40 } };
 
-    const byId = {}, cache = {};
+    const byId = {}, cache = {}, maps = {};
     const cats = [];
     LIST.forEach(function (d) {
         const o = { id: d[0], name: d[1], cat: d[2], tile: d[3], kind: d[4], params: d[5], col: COL[d[2]] || 1 };
@@ -160,21 +252,57 @@ window.MLO = window.MLO || {};
 
     function generate(id) {
         const d = byId[id]; if (!d) return null;
-        const data = new Uint8ClampedArray(SIZE * SIZE * 4); let r = 0, g = 0, b = 0;
+        const data = new Uint8ClampedArray(SIZE * SIZE * 4), height = new Float32Array(SIZE * SIZE); let r = 0, g = 0, b = 0;
         const fn = K[d.kind];
         for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
             const c = fn((x + 0.5) / SIZE, (y + 0.5) / SIZE, d.params), o = (y * SIZE + x) * 4;
             data[o] = clamp8(c[0]); data[o + 1] = clamp8(c[1]); data[o + 2] = clamp8(c[2]); data[o + 3] = 255;
+            height[y * SIZE + x] = c[3] != null ? c[3] : 0.5;
             r += data[o]; g += data[o + 1]; b += data[o + 2];
         }
         const n = SIZE * SIZE;
-        return { id, def: d, size: SIZE, data, avg: [r / n / 255, g / n / 255, b / n / 255] };
+        return { id, def: d, size: SIZE, data, height, avg: [r / n / 255, g / n / 255, b / n / 255] };
+    }
+    // a height for a picture (a photo, an image the user brought): its brightness, smoothed a little
+    function heightFromColour(t) {
+        const w = t.size, h = new Float32Array(w * w), d = t.data;
+        for (let i = 0; i < w * w; i++) h[i] = (0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]) / 255;
+        const o = new Float32Array(w * w);
+        for (let y = 0; y < w; y++) for (let x = 0; x < w; x++) { let s = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) s += h[((y + dy + w) % w) * w + ((x + dx + w) % w)]; o[y * w + x] = s / 9; }
+        return o;
+    }
+    // the normal map (tangent space, x along u, y along v; flipY for the other convention) and the specular map, both tileable, from the height
+    function makeMaps(t, flipY) {
+        const w = t.size, H = t.height || (t.height = heightFromColour(t)), nrm = new Uint8ClampedArray(w * w * 4), spc = new Uint8ClampedArray(w * w * 4);
+        const sf = SURF_ID[t.id] || SURF[t.def.cat] || SURF.Mine, strength = 2.5 * (w / 256);
+        let lo = 1e9, hi = -1e9; for (let i = 0; i < w * w; i++) { if (H[i] < lo) lo = H[i]; if (H[i] > hi) hi = H[i]; }
+        const span = Math.max(1e-6, hi - lo);
+        for (let y = 0; y < w; y++) for (let x = 0; x < w; x++) {
+            const at = (xx, yy) => H[((yy + w) % w) * w + ((xx + w) % w)];
+            const dx = (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1)) - (at(x - 1, y - 1) + 2 * at(x - 1, y) + at(x - 1, y + 1));
+            const dy = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1)) - (at(x - 1, y - 1) + 2 * at(x, y - 1) + at(x + 1, y - 1));
+            let nx = -dx * strength, ny = -dy * strength * (flipY ? -1 : 1), nz = 1; const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+            const o = (y * w + x) * 4; nrm[o] = clamp8((nx * 0.5 + 0.5) * 255); nrm[o + 1] = clamp8((ny * 0.5 + 0.5) * 255); nrm[o + 2] = clamp8((nz * 0.5 + 0.5) * 255); nrm[o + 3] = 255;
+            // the low parts (mortar, grout, gaps) shine less than the faces
+            const hn = (H[y * w + x] - lo) / span, sv = clamp8(255 * (0.25 + 0.75 * hn));
+            spc[o] = sv; spc[o + 1] = sv; spc[o + 2] = sv; spc[o + 3] = 255;
+        }
+        return { normal: nrm, spec: spc, size: w, bump: sf.bump, specMult: sf.spec, falloff: sf.fall };
     }
 
+    // what kind of surface a texture of the model is, from its name (for its shine and its collision type when it has no normal map of its own)
+    function guessCat(n) {
+        if (/brick/.test(n)) return 'Brick'; if (/marble|granite|terrazzo/.test(n)) return 'Marble'; if (/stone|rock|cobble|slate/.test(n)) return 'Stone';
+        if (/tile|ceramic|mosaic/.test(n)) return 'Tile'; if (/wood|plank|timber|board|parquet|oak|pine/.test(n)) return 'Wood'; if (/carpet|rug|fabric|cloth/.test(n)) return 'Carpet';
+        if (/metal|steel|iron|alu|chrome|brass|copper/.test(n)) return 'Metal'; if (/roof|shingle/.test(n)) return 'Roof'; if (/paper/.test(n)) return 'Wallpaper';
+        if (/conc|cement|asphalt|tarmac/.test(n)) return 'Concrete'; if (/plaster|paint|stucco|render|wall/.test(n)) return 'Plaster'; return 'Mine';
+    }
     const TEX = {
         SIZE, list: LIST.map(d => byId[d[0]]), cats, byId,
         def(id) { return byId[id] || byId.plaster_cream; },
-        tile(id) { return (byId[id] || byId.plaster_cream).tile; },
+        // metres one repeat of the picture covers across (u), and up (v: a picture that is not square repeats at its own proportions)
+        tile(id) { const d = byId[id] || byId.plaster_cream; if (d.kind === 'model' && TEX.modelTile) { const t = +TEX.modelTile(d.src); if (t > 0) return t; } return d.tile; },
+        tileV(id) { const d = byId[id] || byId.plaster_cream; return TEX.tile(id) * (d.aspect || 1); },
         colType(id) { return (byId[id] || byId.plaster_cream).col; },
         pixels(id) { if (!byId[id]) id = 'plaster_cream'; return cache[id] || (cache[id] = generate(id)); },
         // swatch canvas for the palette
@@ -200,6 +328,25 @@ window.MLO = window.MLO || {};
             return (TEX.gl[key] = tx);
         },
         resetGL() { TEX.gl = {}; },
+        // the normal and specular maps of a material, for the export (made the first time they are asked for)
+        maps(id, flipY) {
+            if (!byId[id]) id = 'plaster_cream'; const key = id + (flipY ? '|f' : ''); if (maps[key]) return maps[key];
+            return (maps[key] = makeMaps(TEX.pixels(id), flipY));
+        },
+        // a small picture of a material's normal or specular map, for the texture bench
+        mapSwatch(id, which, px) {
+            const d = byId[id], own = d && d.kind === 'model' ? (which === 'normal' ? d.nprev : d.sprev) : null;
+            if (own) {
+                // the model's own map (a small preview of it)
+                const c = document.createElement('canvas'); c.width = c.height = px || 48; c.title = (which === 'normal' ? 'normal map' : 'specular map') + ' of the model';
+                const full = document.createElement('canvas'); full.width = own.w; full.height = own.h; full.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(own.rgba.buffer, own.rgba.byteOffset, own.rgba.byteLength), own.w, own.h), 0, 0);
+                const x = c.getContext('2d'); x.drawImage(full, 0, 0, c.width, c.height); c.style.borderRadius = '3px'; return c;
+            }
+            const mp = TEX.maps(id), c = document.createElement('canvas'); c.width = c.height = px || 48; c.title = which === 'normal' ? 'normal map' : 'specular map';
+            const full = document.createElement('canvas'); full.width = full.height = mp.size; full.getContext('2d').putImageData(new ImageData(which === 'normal' ? mp.normal : mp.spec, mp.size, mp.size), 0, 0);
+            const x = c.getContext('2d'); x.drawImage(full, 0, 0, c.width, c.height); c.style.borderRadius = '3px'; return c;
+        },
+        surface(id) { const d = byId[id] || byId.plaster_cream; if (d.kind === 'model') return d.surf; return SURF_ID[d.id] || SURF[d.cat] || SURF.Mine; },
         // Photographs that ship with the program (ui\tex\*.png): square tiles that repeat, 512 x 512 (twice the size of the generated ones), listed first under "Wood".
         // `tile` is how many metres one tile covers.
         PHOTOS: [
@@ -212,7 +359,7 @@ window.MLO = window.MLO || {};
             for (let i = 0; i < d.length; i += 4) { d[i + 3] = 255; r += d[i]; g += d[i + 1]; b += d[i + 2]; }
             const n = w * w, o = { id: p.id, name: p.name, cat: 'Wood', tile: p.tile, kind: 'photo', params: null, col: COL.Wood };
             if (!byId[p.id]) { const at = TEX.list.findIndex(t => t.cat === 'Wood' && t.kind !== 'photo'); TEX.list.splice(at < 0 ? TEX.list.length : at, 0, o); }          // (after the other photos, before the generated woods)
-            byId[p.id] = o; cache[p.id] = { id: p.id, def: o, size: w, data: d, avg: [r / n / 255, g / n / 255, b / n / 255] };
+            byId[p.id] = o; cache[p.id] = { id: p.id, def: o, size: w, data: d, avg: [r / n / 255, g / n / 255, b / n / 255] }; delete maps[p.id]; delete maps[p.id + '|f'];
             if (TEX.gl[p.id]) delete TEX.gl[p.id]; return o;
         },
         loadPhotos() {
@@ -227,7 +374,7 @@ window.MLO = window.MLO || {};
             for (let i = 0; i < d.length; i += 4) { d[i + 3] = 255; r += d[i]; g += d[i + 1]; b += d[i + 2]; }
             const n = SIZE * SIZE, o = { id, name, cat: 'Mine', tile: tile || 1, kind: 'user', params: null, col: 1 };
             if (!byId[id]) TEX.list.push(o); byId[id] = o; if (cats.indexOf('Mine') < 0) cats.push('Mine');
-            cache[id] = { id, def: o, size: SIZE, data: d, avg: [r / n / 255, g / n / 255, b / n / 255] };
+            cache[id] = { id, def: o, size: SIZE, data: d, avg: [r / n / 255, g / n / 255, b / n / 255] }; delete maps[id]; delete maps[id + '|f'];
             if (TEX.gl[id]) delete TEX.gl[id]; return o;
         },
         clearUser() {
@@ -238,6 +385,54 @@ window.MLO = window.MLO || {};
             TEX.clearUser();
             return Promise.all((list || []).map(t => new Promise(res => { const im = new Image(); im.onload = () => { TEX.addUser(t.id, t.name, t.tile, im); res(); }; im.onerror = () => res(); im.src = t.url; })));
         },
+        // ---- the textures of the imported model (Paint tab, bench "From the model"): its own pictures, painted on your walls and floors ----
+        // info: what the host says about one (name, w, h, tris, tile in metres from the model's texture coordinates, faces [sideways, up, down], normal / spec map names
+        // and previews, the shader's bump / specAmt / fall); img: { w, h, rgba } the preview the model is drawn with. The export takes the picture itself from your files.
+        MODEL_CAT: 'From the model',
+        modelTile: null,                     // (set by the import code: the "repeats every" you typed for a texture, kept in the project)
+        modelId(name) {
+            const c = String(name || '').toLowerCase().replace(/[^a-z0-9_]/g, '_'); let id = 'mdl_' + c.slice(0, 26);
+            if (byId[id] && byId[id].src !== name) { let h = 0; for (let i = 0; i < c.length; i++) h = (h * 31 + c.charCodeAt(i)) >>> 0; id = 'mdl_' + c.slice(0, 21) + '_' + (h % 46656).toString(36).padStart(3, '0'); }
+            return id;
+        },
+        addModel(info, img) {
+            if (!info || !img || !img.rgba || !img.w || !img.h) return null;
+            const name = String(info.name).toLowerCase(), id = TEX.modelId(name), cat = guessCat(name), d = new Uint8ClampedArray(SIZE * SIZE * 4), src = img.rgba;
+            let r = 0, g = 0, b = 0;
+            // (the preview drawn square: the picture covers one repeat whatever its proportions; tileV keeps them on the walls)
+            for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
+                const sx = Math.min(img.w - 1, Math.floor((x + 0.5) * img.w / SIZE)), sy = Math.min(img.h - 1, Math.floor((y + 0.5) * img.h / SIZE)), si = (sy * img.w + sx) * 4, o = (y * SIZE + x) * 4;
+                d[o] = src[si]; d[o + 1] = src[si + 1]; d[o + 2] = src[si + 2]; d[o + 3] = 255; r += d[o]; g += d[o + 1]; b += d[o + 2];
+            }
+            const n = SIZE * SIZE, own = !!info.normal, base = SURF[cat] || SURF.Mine;
+            const surf = own ? { bump: info.bump != null ? +info.bump : 1, spec: info.specAmt != null ? +info.specAmt : base.spec, fall: info.fall != null ? +info.fall : base.fall } : base;
+            const prev = (p) => p && p.rgba ? { w: p.w, h: p.h, rgba: typeof p.rgba === 'string' ? M.fromB64(p.rgba) : p.rgba } : null;
+            const o = { id, name: info.name, cat: TEX.MODEL_CAT, tile: +info.tile > 0 ? Math.round(+info.tile * 100) / 100 : 1, est: +info.tile > 0 ? +info.tile : 0, kind: 'model', params: null, col: COL[cat] || 1, src: name,
+                aspect: info.w && info.h ? info.h / info.w : 1, w: info.w, h: info.h, uses: info.tris || 0, faces: info.faces || [0, 0, 0], normal: info.normal || '', spec: info.spec || '', surf, guess: cat, nprev: prev(info.nprev), sprev: prev(info.sprev), files: info.files || [] };
+            if (!byId[id]) TEX.list.push(o); else { const i = TEX.list.indexOf(byId[id]); if (i >= 0) TEX.list[i] = o; }
+            byId[id] = o; if (cats.indexOf(TEX.MODEL_CAT) < 0) cats.unshift(TEX.MODEL_CAT);
+            cache[id] = { id, def: o, size: SIZE, data: d, avg: [r / n / 255, g / n / 255, b / n / 255] }; delete maps[id]; delete maps[id + '|f']; if (TEX.gl[id]) delete TEX.gl[id];
+            return o;
+        },
+        clearModel() {
+            for (let i = TEX.list.length - 1; i >= 0; i--) if (TEX.list[i].kind === 'model') { const id = TEX.list[i].id; delete byId[id]; delete cache[id]; delete maps[id]; delete maps[id + '|f']; delete TEX.gl[id]; TEX.list.splice(i, 1); }
+            const k = cats.indexOf(TEX.MODEL_CAT); if (k >= 0) cats.splice(k, 1);
+        },
+        // every texture of the model that has a preview, the most used first; returns how many
+        loadModel(infos, imgs) {
+            TEX.clearModel();
+            (infos || []).slice().sort((a, b) => (b.tris || 0) - (a.tris || 0)).forEach(i => { const im = imgs && imgs[String(i.name).toLowerCase()]; if (im) TEX.addModel(i, im); });
+            return TEX.list.filter(t => t.kind === 'model').length;
+        },
+        modelList() { return TEX.list.filter(t => t.kind === 'model'); },
+        // the built-in textures closest in colour to a texture (to match the model with the program's own, which have their own normal maps)
+        nearest(id, n) {
+            const a = TEX.pixels(id).avg, out = [];
+            LIST.forEach(d => { const b = TEX.pixels(d[0]).avg; out.push([d[0], (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2]); });
+            return out.sort((p, q) => p[1] - q[1]).slice(0, n || 6).map(p => p[0]);
+        },
+        // where a texture is on the model, in words
+        whereOnModel(d) { const f = d && d.faces; if (!f || !(f[0] + f[1] + f[2])) return ''; return f[0] >= 0.6 ? 'walls' : (f[1] >= 0.6 ? 'floors and roofs' : (f[2] >= 0.6 ? 'ceilings' : 'walls and floors')); },
         // the 256 x 256 picture as a PNG for saving with the project
         userUrl(id) {
             const t = cache[id]; if (!t) return ''; const c = document.createElement('canvas'); c.width = c.height = SIZE; c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(t.data), SIZE, SIZE), 0, 0); return c.toDataURL('image/png');

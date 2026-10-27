@@ -109,12 +109,37 @@ window.MLO = window.MLO || {};
         try { return fn(); } finally { bSwitch(P, orig); }
     }
 
+    // how the interior looks in the game: normal maps, the default light, wall colour variants (entity sets), skirting, crown and frames, the timecycle
+    function defaultLook() {
+        return {
+            normalMaps: true, flipGreen: false,
+            light: { r: 255, g: 238, b: 210, intensity: 4, range: 6, exponent: 24, type: 'point', coneInner: 30, coneOuter: 70, shadows: true, volume: false, corona: 0, specular: true },
+            variants: [],                      // [{ id, name, swap: { texId: texId } }]: each is an entity set; the default paint is one too
+            skirting: { on: true, h: 0.10, d: 0.015, tex: '' }, crown: { on: false, h: 0.07, d: 0.035, tex: '' },
+            frames: 'detailed', sills: true,
+            timecycle: { mode: 'default', game: '', base: '', vars: null }          // default: the program's usual one; game: one of the game's by name; custom: your own values (vars: { name: [value, second] })
+        };
+    }
+    function mergeLook(l) {
+        const d = defaultLook(); l = l || {};
+        const o = Object.assign(d, l); o.light = Object.assign(defaultLook().light, l.light || {}); o.skirting = Object.assign(defaultLook().skirting, l.skirting || {}); o.crown = Object.assign(defaultLook().crown, l.crown || {});
+        o.variants = Array.isArray(l.variants) ? l.variants : []; o.timecycle = Object.assign(defaultLook().timecycle, l.timecycle || {}); return o;
+    }
+
+    // the entity sets the colour schemes become: [{ name, variant }] (variant null = the colours as painted); only schemes that swap something count
+    function colourSets(l) {
+        l = mergeLook(l); const vars = l.variants.filter(v => v && v.swap && Object.keys(v.swap).some(k => v.swap[k] && v.swap[k] !== k)); if (!vars.length) return [];
+        const used = new Set(), slug = (t) => (t || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 14) || 'v', uniq = (n) => { let c = n, k = 2; while (used.has(c)) c = n + k++; used.add(c); return c; };
+        return [{ name: uniq('paint_' + slug(l.defaultName || 'default')), variant: null }].concat(vars.map(v => ({ name: uniq('paint_' + slug(v.name)), variant: v })));
+    }
+
     function newProject(name, kind) {
         const p = {
             version: 1, kind: kind === 'vanilla' ? 'vanilla' : (kind === 'import' ? 'import' : 'grid'), name: name || 'New House', prefix: 'mlo' + randId(),
             settings: { storyHeight: 3.1, wallThickness: 0.2, slab: 0.2, foundation: 0.5 },
             defaults: defaultsFor(), levels: [newLevel()], entrance: null,
-            export: { resource: '', label: '', coords: '', pedZ: true, floorAbove: 0.1, autoLights: true, outDir: '' }
+            export: { resource: '', label: '', coords: '', pedZ: true, floorAbove: 0.1, autoLights: true, outDir: '' },
+            look: defaultLook()
         };
         if (p.kind === 'vanilla') {
             // interior shell inside a house that already exists in the game: placement comes from the grabbed house
@@ -139,7 +164,7 @@ window.MLO = window.MLO || {};
         const d = newProject(p.name, p.kind);
         p.kind = d.kind;
         p.settings = Object.assign(d.settings, p.settings || {}); p.defaults = Object.assign(d.defaults, p.defaults || {});
-        p.export = Object.assign(d.export, p.export || {}); p.prefix = p.prefix || d.prefix;
+        p.export = Object.assign(d.export, p.export || {}); p.prefix = p.prefix || d.prefix; p.look = mergeLook(p.look);
         p.levels = (p.levels && p.levels.length ? p.levels : [newLevel()]).map(l => Object.assign(newLevel(), l));
         if (p.entrance === undefined) p.entrance = null;
         if (p.kind === 'vanilla') { p.vanilla = Object.assign(d.vanilla, p.vanilla || {}); p.vanilla.nudge = Object.assign({ dz: 0, dh: 0 }, p.vanilla.nudge || {}); p.shell = Object.assign(newShell(), p.shell || {}); }
@@ -231,6 +256,8 @@ window.MLO = window.MLO || {};
         M.Errors.crumb('open project "' + name + '"');
         try { await saveThumb(true); } catch (e) { }                     // the project that is leaving, while its view is still on screen
         const p = await api('project?name=' + encodeURIComponent(name));
+        // the game's own interiors joined together: a page of their own
+        if (p && p.kind === 'combo') { if (!state.saved && state.project && state.project.name) { try { await save(); } catch (e) { } } location.href = 'interiors.html?name=' + encodeURIComponent(name); return new Promise(() => { }); }
         state.project = upgrade(p); state.project.name = name; state.level = 0; hist.undo.length = 0; hist.redo.length = 0; state.saved = true; state.dirty = false;
         state.shellSel = null; state.ref = null;
         if (state.project.kind === 'vanilla') await loadRef(name);
@@ -317,7 +344,26 @@ window.MLO = window.MLO || {};
         }
     };
 
-    M.Model = { bldAll, switchBuilding, addBuilding, renameBuilding, deleteBuilding, withBuilding, state, bus, api, apiRaw, saveAs, touch, edit, undo, redo, save, listProjects, openProject, createProject, renameProject, renameAny, duplicate, deleteProject, saveThumb, openedAt, cur, ensureLevels, ops, newLevel, newProject, upgrade, hist, loadRef, saveRef, safeName };
+    // ---- export names: developer_project for every file the resource makes itself (lowercase, letters and digits); the game files a project replaces keep their own names ----
+    let developer = '';
+    const slug = (s, n) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, n);
+    const safeRes = (s) => (s || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+    async function loadSettings() { try { const s = await api('settings'); developer = (s && s.developer) || ''; } catch (e) { } try { if (!developer) developer = localStorage.getItem('mlo.developer') || ''; } catch (e) { } return developer; }
+    async function setDeveloper(name) {
+        developer = String(name || '').trim().slice(0, 40); try { localStorage.setItem('mlo.developer', developer); } catch (e) { }
+        try { await api('settings', 'POST', { developer }); } catch (e) { }
+        bus.emit('names');
+    }
+    function getDeveloper() { return developer; }
+    // { prefix, resource, auto }: the prefix has no trailing _ (the host adds it); the first building of a project uses it as it is, the others add _2, _3...
+    function exportNames(P, nameOverride) {
+        const X = (P && P.export) || {};
+        if (X.autoNames === false) return { prefix: (P.prefix || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30), resource: safeRes(X.resource) || ('mlo_' + (safeRes(P.name) || 'house')), auto: false };
+        const parts = [slug(developer, 20), slug(nameOverride != null ? nameOverride : P.name, 20)].filter(Boolean), base = parts.join('_') || slug(P.prefix, 20) || 'mlo';
+        return { prefix: base, resource: base, auto: true };
+    }
+
+    M.Model = { colourSets, defaultLook, mergeLook, loadSettings, setDeveloper, getDeveloper, exportNames, bldAll, switchBuilding, addBuilding, renameBuilding, deleteBuilding, withBuilding, state, bus, api, apiRaw, saveAs, touch, edit, undo, redo, save, listProjects, openProject, createProject, renameProject, renameAny, duplicate, deleteProject, saveThumb, openedAt, cur, ensureLevels, ops, newLevel, newProject, upgrade, hist, loadRef, saveRef, safeName };
 })(window.MLO);
 
 

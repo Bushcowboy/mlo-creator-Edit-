@@ -154,9 +154,15 @@ window.MLO = window.MLO || {};
         const P = S.project, k = kit();
         root.append(el('div', { class: 'h' }, 'Paint'), el('div', { class: 'note' }, 'Walls: click a wall face. Floors: drag a rectangle with the Floor paint tool (key 7) or set the whole floor below. Pick a texture in the bench underneath.'));
         root.append(el('div', { class: 'row' }, k.seg([['wall', 'Walls'], ['floor', 'Floors']], S.paintTarget === 'floor' ? 'floor' : 'wall', v => { S.paintTarget = v; S.shellTool = v === 'floor' ? 'floor' : 'paint'; S.benchSel = S.brush[v]; M.App.refreshPanels(); })));
+        // the imported model's own textures can be painted with too (the bench's "From the model")
+        const mt = TEX.modelList ? TEX.modelList() : [];
+        if (mt.length) root.append(el('div', { class: 'h' }, 'From the model'), el('div', { class: 'note' }, mt.length + ' texture' + (mt.length === 1 ? '' : 's') + ' of your imported files can go on your walls, floors and ceilings, at the size ' + (mt.length === 1 ? 'it has' : 'they have') + ' on the model' + (mt.some(t => t.normal) ? ', with their own normal maps' : '') + '. The export puts the pictures themselves in the resource.'),
+            el('div', { class: 'row wrap' }, ...mt.slice(0, 8).map(t => el('span', { title: t.name + (TEX.whereOnModel(t) ? ' (on the model\'s ' + TEX.whereOnModel(t) + ')' : ''), style: { cursor: 'pointer' }, onclick: () => { S.benchCat = TEX.MODEL_CAT; S.benchSel = t.id; S.brush[S.paintTarget] = t.id; M.App.refreshPanels(); } }, k.swatchEl(t.id, 30))),
+                el('button', { class: 'btn sm', onclick: () => { S.benchCat = TEX.MODEL_CAT; M.App.refreshPanels(); } }, 'Show them in the bench')));
         root.append(el('div', { class: 'h' }, 'Project theme'), el('div', { class: 'note' }, 'What every unpainted surface looks like. Pick a texture below, then press Set.'));
         DEFAULT_ROWS.forEach(r => root.append(el('div', { class: 'defrow' }, k.swatchEl(P.defaults[r[0]], 22), el('span', null, r[1]),
             el('button', { class: 'btn sm', onclick: () => { Model.edit(PP => { PP.defaults[r[0]] = S.benchSel || S.brush[S.paintTarget]; }); M.App.refreshPanels(); } }, 'Set'))));
+        if (M.Look) M.Look.render(root);
     };
 
     // ---------------- right panel ----------------
@@ -183,10 +189,7 @@ window.MLO = window.MLO || {};
     VU.renderExport = function (root) {
         const P = S.project, X = P.export, V = P.vanilla, k = kit(); ex = {};
         const text = (key, ph) => el('input', { type: 'text', class: 'grow', value: X[key] || '', placeholder: ph || '', oninput: (e) => { X[key] = e.target.value; Model.touch(); } });
-        root.append(el('div', { class: 'h' }, 'Resource'));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Folder'), text('resource', 'mlo_' + (safeRes(P.name) || 'house'))));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Prefix'), el('input', { type: 'text', class: 'grow', value: P.prefix, maxlength: 8, title: 'Every model in the pack starts with this. Keep it unique on your server.', oninput: (e) => { P.prefix = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8); Model.touch(); } })));
-        root.append(el('div', { class: 'row' }, el('label', null, 'Label'), text('label', P.name)));
+        M.UI.renderNames(root, text);
         root.append(el('div', { class: 'h' }, 'Where it goes'));
         const pl = placement(P);
         if (!pl) root.append(el('div', { class: 'note', style: { color: '#f0a4a3' } }, 'No house has been grabbed yet. Use the House tab first.'));
@@ -222,8 +225,8 @@ window.MLO = window.MLO || {};
         if (!pl) { toast('Grab a house first.', 'warn'); return; }
         const built = Shell.build(P, { mode: 'export', autoLights: X.autoLights });
         if (!built.batches.length) { toast('The interior is empty: grab a house or add a room first.', 'warn'); return; }
-        if (!P.prefix) { toast('Give the project a prefix first.', 'warn'); return; }
-        const resource = safeRes(X.resource) || ('mlo_' + (safeRes(P.name) || 'house'));
+        const N = Model.exportNames(P); if (!N.prefix) { toast('Give the project a prefix first.', 'warn'); return; }
+        const resource = N.resource;
         ex.btn.disabled = true; ex.btn.textContent = 'Exporting...';
         try {
             log('Meshing: ' + built.stats.tris + ' triangles, ' + built.stats.boxes + ' collision boxes, ' + built.stats.portals + ' portals, ' + built.stats.lights + ' lights');
@@ -232,7 +235,7 @@ window.MLO = window.MLO || {};
             const patch = anyCut ? { enabled: true, gta: P.vanilla.gta || '', frame: { ox: pl.x, oy: pl.y, oz: pl.z, heading: pl.heading }, ceilH: P.settings.ceilH, rects: Shell.regionRects(P.shell), openings: built.shell.resolved,
                 doors: X.cutDoor !== false, windows: X.cutWindows !== false, collision: X.cutCollision !== false, occluders: X.cutOccluders !== false } : undefined;
             if (patch) log('Cutting the game files for this house (the first run reads the game, about half a minute)...');
-            const model = Mesher.toExport(P, built, { light: {}, model: { resource, prefix: P.prefix, label: X.label || P.name, timecycle: 'hash_E83C53FC', placement: pl, entranceNote: 'the grabbed house door at ' + (P.vanilla.door || '').replace(/\s+/g, ' ').trim(), outDir: X.outDir || undefined, patch } });
+            const model = Mesher.toExport(P, built, { light: {}, model: { resource, prefix: N.prefix, label: X.label || P.name, timecycle: 'hash_E83C53FC', placement: pl, entranceNote: 'the grabbed house door at ' + (P.vanilla.door || '').replace(/\s+/g, ' ').trim(), outDir: X.outDir || undefined, patch } });
             const res = await Model.api('export', 'POST', model);
             if (!res.ok) { log('Export failed: ' + res.error, 'bad'); console.error(res.detail); }
             else {

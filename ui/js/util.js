@@ -61,6 +61,7 @@ window.MLO = window.MLO || {};
         for (let i = 0; i < bytes.length; i += CH) s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
         return btoa(s);
     }
+    function fromB64(s) { const bin = atob(s || ''), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
 
     function el(tag, attrs, ...kids) {
         const e = document.createElement(tag);
@@ -82,5 +83,5 @@ window.MLO = window.MLO || {};
     const keyOf = (i, j) => i + ',' + j;
     const parseKey = (k) => { const p = k.split(','); return [parseInt(p[0], 10), parseInt(p[1], 10)]; };
 
-    M.mat4 = mat4; M.toB64 = toB64; M.el = el; M.clamp = clamp; M.keyOf = keyOf; M.parseKey = parseKey;
+    M.mat4 = mat4; M.toB64 = toB64; M.fromB64 = fromB64; M.el = el; M.clamp = clamp; M.keyOf = keyOf; M.parseKey = parseKey;
 })(window.MLO);

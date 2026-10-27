@@ -47,7 +47,7 @@ window.MLO = window.MLO || {};
             if (IM.loaded && IM._syncKey !== fk) { IM._syncKey = fk; IM.syncFaceCutters(); }
             const ck = JSON.stringify([I.frame, I.target, I.cutters, I.deletes, I.fills, IM.clearKey()]);      // (the rooms clear parts of the model too, so they are part of the cut)
             App.built = M.Shell.build(S.project, { boxes: true });          // (with the collision boxes, for the "my collision" outline)
-            App.renderer.setBatches(App.built.batches.concat(IM.doorBatches(), M.FitModels.batches()));
+            App.renderer.setBatches(App.built.batches.concat(IM.doorBatches(), M.FitModels.batches(), M.Props ? M.Props.batches() : []));
             // the imported model only changes with the grid (frame) or with cutters / deleted faces
             const md = I.mdeletes || [], bk = JSON.stringify([I.building, I.iso, md.length, md[md.length - 1]]), again = fk !== App._fk || bk !== App._bk;
             if (bk !== App._bk && IM.loaded) IM.rebuildMembers();
@@ -85,7 +85,7 @@ window.MLO = window.MLO || {};
     App.setTool = function (tool) {
         M.Errors.crumb('tool ' + tool);
         if (isShell()) {
-            const ok = isImport() ? ['building', 'frame', 'level', 'room', 'cut', 'fill', 'part', 'door', 'window', 'arch', 'floor', 'light', 'figure', 'faces', 'edges', 'parts', 'collision', 'cbox', 'walk', 'fit', 'plants', 'select', 'eraser', 'paint'] : ['room', 'cut', 'part', 'door', 'window', 'arch', 'floor', 'select', 'eraser', 'paint'];
+            const ok = isImport() ? ['building', 'frame', 'level', 'room', 'cut', 'fill', 'part', 'door', 'window', 'arch', 'floor', 'light', 'column', 'beam', 'furnish', 'figure', 'faces', 'edges', 'parts', 'collision', 'cbox', 'walk', 'fit', 'plants', 'select', 'eraser', 'paint'] : ['room', 'cut', 'part', 'door', 'window', 'arch', 'floor', 'select', 'eraser', 'paint'];
             if (ok.indexOf(tool) < 0) return;
             if (tool === 'paint') { S.shellTool = 'paint'; App.setTab('paint'); return; }
             if (tool === 'collision' && isImport() && !S.showCollision) { S.showCollision = true; M.ImportModel.requestCollision(); M.UI.renderRight(); }       // the pieces to pick are the orange lines
@@ -159,7 +159,14 @@ window.MLO = window.MLO || {};
 
     // nothing is opened or created by itself: the start screen lists the projects (unless the user ticked "open the last project automatically")
     async function startProject() {
+        // index.html?gamepull={...}: a building picked in the game (Server and world page): a new project, its files pulled from the game, the guided build
+        try {
+            const gp = new URLSearchParams(location.search).get('gamepull');
+            if (gp && M.Guide) { const spec = JSON.parse(gp); history.replaceState(null, '', location.pathname); await M.Guide.fromGame(spec); return; }
+        } catch (e) { UI.toast('Could not start the project from the game: ' + e.message, 'err'); }
         let name = null, auto = false; try { name = localStorage.getItem('mlo.last'); auto = localStorage.getItem('mlo.autoopen') === '1'; } catch (e) { }
+        // (back from the game interiors page: show the project list rather than opening that combination again)
+        try { if (sessionStorage.getItem('mlo.noauto') === '1') { sessionStorage.removeItem('mlo.noauto'); auto = false; } } catch (e) { }
         if (auto && name) { try { await Model.openProject(name); return; } catch (e) { /* the last project is gone: show the start screen */ } }
         Model.state.project = Model.newProject('New House', 'grid'); bus.emit('project');          // an empty page behind the start screen, never saved
         UI.startDialog();
@@ -223,6 +230,7 @@ window.MLO = window.MLO || {};
         setInterval(() => { Model.api('ping').catch(() => { }); }, 4000);
 
         try { await M.TEX.loadPhotos(); } catch (e) { /* the photo floors are missing: the generated ones still work */ }
+        try { await Model.loadSettings(); } catch (e) { }           // (the developer name the export names files after)
         try { await startProject(); } catch (e) { UI.toast('Could not load a project: ' + e.message, 'err'); Model.state.project = Model.newProject('New House'); bus.emit('project'); }
         UI.renderAll(); App.refreshGrid();
         requestAnimationFrame(frame);

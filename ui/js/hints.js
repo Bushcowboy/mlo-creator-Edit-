@@ -21,6 +21,9 @@ window.MLO = window.MLO || {};
         arch: ['Archway', [['Click a wall', 'Cut an archway'], ['Drag the box', 'Move it']]],
         floor: ['Floor paint', [['Drag', 'Give an area the floor texture']]],
         light: ['Light', [['Click the floor', 'Hang or remove a ceiling light']]],
+        column: ['Column', [['Click the floor', 'Stand a column, or remove one'], ['8', 'This tool']]],
+        beam: ['Beam', [['Click, click', 'Start and end of a beam'], ['Shift', 'Any angle'], ['Alt+click', 'Remove a beam'], ['Esc', 'Cancel']]],
+        furnish: ['Place props', [['Click the floor', 'Place the chosen model'], ['Click a prop', 'Stand the model on it'], ['Alt+click / drag', 'Select / move a prop'], ['Esc', 'Drop the chosen model'], ['R', 'Turn 90° (Shift: 15°)'], ['Shift+D', 'Copy'], ['X', 'Remove'], ['0', 'This tool']]],
         figure: ['Scale figure', [['Click', 'Stand the figure there'], ['Drag the figure', 'Move it'], ['R', 'Turn it 45°']]],
         faces: ['Delete faces', [['Click', 'Select the flat patch'], ['Shift+click', 'Add or remove'], ['Drag', 'Box select'], ['Alt+click', 'Connected piece'], ['A', 'All'], ['Shift+G', 'Same texture'], ['X', 'Delete']]],
         parts: ['Model parts', [['Click', 'Choose the part under the pointer'], ['Hover a row', 'See where it is'], ['Remove / Restore', 'In the panel']]],
@@ -30,7 +33,7 @@ window.MLO = window.MLO || {};
         fit: ['Window / door models', [['Click a wall', 'Put the chosen model there'], ['Click a model', 'Select it'], ['Drag a model', 'Slide it'], ['Arrows / cubes / ring', 'Move / size / turn'], ['R', 'Turn 90°'], ['Shift+D', 'Duplicate'], ['X', 'Delete']]],
         walk: ['Walk check', [['Click the floor', 'Start the walk there'], ['Run the check', 'In the panel'], ['Show', 'Jump to a problem']]],
         edges: ['Edges', [['Click', 'Select an edge'], ['Shift+click', 'Add or remove'], ['Alt+click', 'The whole loop'], ['A', 'Select all'], ['F', 'Fill the hole'], ['Esc', 'Select none']]],
-        eraser: ['Eraser', [['Click', 'Remove a cutter, light, partition or opening']]],
+        eraser: ['Eraser', [['Click', 'Remove a cutter, light, column, beam, prop, partition or opening']]],
         paint: ['Paint', [['Click a wall', 'Apply the chosen texture']]]
     };
     const GRID = {

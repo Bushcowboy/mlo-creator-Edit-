@@ -90,13 +90,13 @@ window.MLO = window.MLO || {};
             const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
             let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
             const l = Math.hypot(nx, ny, nz); if (l < 1e-12) return; nx /= l; ny /= l; nz /= l;
-            const tile = glass ? 1 : TEX.tile(tex), ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz);
+            const tile = glass ? 1 : TEX.tile(tex), tv = glass ? 1 : TEX.tileV(tex), ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz);
             const base = m.pos.length / 3;
             [a, b, c, d].forEach(p => {
                 m.pos.push(p[0], p[1], p[2]); m.nrm.push(nx, ny, nz);
-                if (ax >= ay && ax >= az) m.uv.push(p[1] / tile, -p[2] / tile);
-                else if (ay >= ax && ay >= az) m.uv.push(p[0] / tile, -p[2] / tile);
-                else m.uv.push(p[0] / tile, p[1] / tile);
+                if (ax >= ay && ax >= az) m.uv.push(p[1] / tile, -p[2] / tv);
+                else if (ay >= ax && ay >= az) m.uv.push(p[0] / tile, -p[2] / tv);
+                else m.uv.push(p[0] / tile, p[1] / tv);
                 for (let q = 0; q < 3; q++) { if (p[q] < bmn[q]) bmn[q] = p[q]; if (p[q] > bmx[q]) bmx[q] = p[q]; }
             });
             m.idx.push(base, base + 1, base + 2, base + 2, base + 3, base);
@@ -380,7 +380,7 @@ window.MLO = window.MLO || {};
         for (let kk = 0; kk <= nLev; kk++) buildSlabs(kk);
         if (exportMode) {
             if (opts.autoLights !== false) for (let k = 0; k < nLev; k++) buildLights(k);
-            for (let k = 0; k < nLev; k++) (lv[k].lights || []).forEach(l => lights.push({ x: l.x, y: l.y, z: (k + 1) * H - S - 0.15 }));
+            for (let k = 0; k < nLev; k++) (lv[k].lights || []).forEach(l => lights.push({ x: l.x, y: l.y, z: (k + 1) * H - S - 0.15 - (l.own && l.own.drop ? +l.own.drop : 0), own: l.own || null }));
         }
 
         // ---- finish ----
@@ -397,23 +397,48 @@ window.MLO = window.MLO || {};
             glass: { name: 'glass', room: 1, flags: 32, lod: 200, mats: [], lights: [] }
         };
         const cur = new Map(), usedTex = new Set();
-        built.batches.forEach(b => {
-            const g = groups[b.group]; if (!g) return;
-            const key = b.group + '|' + b.tex + '|' + b.glass; let m = cur.get(key);
+        const add = (gk, b, tex, uvk) => {
+            const g = groups[gk]; if (!g) return;
+            const key = gk + '|' + tex + '|' + b.glass; let m = cur.get(key);
             const nv = b.pos.length / 3;
-            if (!m || m.pos.length / 3 + nv > MAXV) { m = { tex: b.tex, glass: b.glass, pos: [], nrm: [], uv: [], idx: [] }; cur.set(key, m); g.mats.push(m); }
+            if (!m || m.pos.length / 3 + nv > MAXV) { m = { tex, glass: b.glass, pos: [], nrm: [], uv: [], idx: [] }; cur.set(key, m); g.mats.push(m); }
             const off = m.pos.length / 3;
             for (let i = 0; i < b.pos.length; i++) m.pos.push(b.pos[i]);
             for (let i = 0; i < b.nrm.length; i++) m.nrm.push(b.nrm[i]);
-            for (let i = 0; i < b.uv.length; i++) m.uv.push(b.uv[i]);
+            const ku = Array.isArray(uvk) ? uvk[0] : uvk, kv = Array.isArray(uvk) ? uvk[1] : uvk;
+            for (let i = 0; i < b.uv.length; i++) m.uv.push(b.uv[i] * (i % 2 ? kv : ku));
             for (let i = 0; i < b.idx.length; i++) m.idx.push(b.idx[i] + off);
-            if (!b.glass) usedTex.add(b.tex);
+            if (!b.glass) usedTex.add(tex);
+        };
+        // wall colour variants: every surface whose texture a variant swaps leaves the always-there part and goes into one part per variant
+        // (the default colours too); each such part is an entity set of the interior, switched by name in the game
+        const cs = (M.Model && M.Model.colourSets) ? M.Model.colourSets(project.look) : [], vars = cs.slice(1).map(c => c.variant), setNames = cs.map(c => c.name);
+        const swapped = new Set(); vars.forEach(v => Object.keys(v.swap).forEach(k => { if (v.swap[k] && v.swap[k] !== k) swapped.add(k); }));
+        cs.forEach((c, i) => { groups['pnt' + i] = { name: 'pnt' + i, room: 1, flags: 1572864, lod: 300, mats: [], lights: [], set: c.name }; });
+        built.batches.forEach(b => {
+            if (vars.length && b.group === 'int' && !b.glass && swapped.has(b.tex)) {
+                add('pnt0', b, b.tex, 1);
+                vars.forEach((v, i) => { const t = v.swap[b.tex] && TEX.byId[v.swap[b.tex]] ? v.swap[b.tex] : b.tex; add('pnt' + (i + 1), b, t, [TEX.tile(b.tex) / TEX.tile(t), TEX.tileV(b.tex) / TEX.tileV(t)]); });       // (the new texture repeats at its own size)
+            } else add(b.group, b, b.tex, 1);
         });
         const L = extra.light || {};
-        groups.int.lights = built.lights.slice(0, 48).map(l => ({ x: l.x, y: l.y, z: l.z, r: 255, g: 238, b: 210, intensity: L.intensity || 4, falloff: L.falloff || 6, exponent: L.exponent || 24 }));
+        // every light: the project's light (Paint tab > Lights), and what a placed light has of its own
+        const LD = ((M.Model && M.Model.mergeLook) ? M.Model.mergeLook(project.look) : {}).light || {};
+        groups.int.lights = built.lights.slice(0, 48).map(l => {
+            const o = Object.assign({}, LD, l.own || {});
+            return { x: l.x, y: l.y, z: l.z, r: o.r != null ? o.r : 255, g: o.g != null ? o.g : 238, b: o.b != null ? o.b : 210, intensity: o.intensity || L.intensity || 4, falloff: o.range || L.falloff || 6, exponent: o.exponent || L.exponent || 24,
+                type: o.type === 'spot' ? 'spot' : 'point', coneInner: o.coneInner || 30, coneOuter: o.coneOuter || 70, shadows: o.shadows !== false, volume: !!o.volume, corona: +o.corona || 0, specular: o.specular !== false };
+        });
+        const look = (M.Model && M.Model.mergeLook) ? M.Model.mergeLook(project.look) : { normalMaps: false }, nm = look.normalMaps !== false;
+        // a material with a normal map and a specular map: the game's normal_spec shader, with the bumpiness and shine of its kind of surface
+        const matOut = (m) => {
+            const o = { tex: m.tex, glass: m.glass, pos: M.toB64(new Float32Array(m.pos)), nrm: M.toB64(new Float32Array(m.nrm)), uv: M.toB64(new Float32Array(m.uv)), idx: M.toB64(new Int32Array(m.idx)) };
+            if (nm && !m.glass) { const sf = TEX.surface(m.tex); o.nm = true; o.bump = sf.bump; o.spec = sf.spec; o.fall = sf.fall; }
+            return o;
+        };
         const outGroups = Object.keys(groups).map(k => groups[k]).filter(g => g.mats.length > 0).map(g => ({
-            name: g.name, room: g.room, flags: g.flags, lod: g.lod, lights: g.lights,
-            mats: g.mats.map(m => ({ tex: m.tex, glass: m.glass, pos: M.toB64(new Float32Array(m.pos)), nrm: M.toB64(new Float32Array(m.nrm)), uv: M.toB64(new Float32Array(m.uv)), idx: M.toB64(new Int32Array(m.idx)) }))
+            name: g.name, room: g.room, flags: g.flags, lod: g.lod, lights: g.lights, set: g.set || undefined,
+            mats: g.mats.map(matOut)
         }));
         // collision: 8 vertices per box
         const verts = [], tris = [];
@@ -427,14 +452,31 @@ window.MLO = window.MLO || {};
             const quad = (a, b2, c, d) => { tris.push(v + a, v + b2, v + c, mi, v + c, v + d, v + a, mi); };
             quad(1, 2, 6, 5); quad(3, 0, 4, 7); quad(2, 3, 7, 6); quad(0, 1, 5, 4); quad(4, 5, 6, 7); quad(3, 2, 1, 0);
         });
-        const textures = [...usedTex].map(id => {
-            const t = TEX.pixels(id); return { name: id, size: t.size, rgba: M.toB64(new Uint8Array(t.data.buffer, t.data.byteOffset, t.data.byteLength)) };
+        // collision triangles (sloped ceilings, gable ends): three corners and a material each
+        const ct = built.colTris || [];
+        for (let i = 0; i + 9 < ct.length; i += 10) { const v = verts.length / 3; verts.push(ct[i], ct[i + 1], ct[i + 2], ct[i + 3], ct[i + 4], ct[i + 5], ct[i + 6], ct[i + 7], ct[i + 8]); tris.push(v, v + 1, v + 2, ct[i + 9]); }
+        const textures = [], projName = (M.Model && M.Model.safeName) ? M.Model.safeName(project.name) : project.name;
+        [...usedTex].forEach(id => {
+            const t = TEX.pixels(id), b64 = (a) => M.toB64(new Uint8Array(a.buffer, a.byteOffset, a.byteLength)), d = TEX.byId[id];
+            // a texture of the imported model: the host copies the picture itself (and its own normal and specular maps) from your files; the preview is the stand-in
+            const own = d && d.kind === 'model', tx = { name: id, size: t.size, rgba: b64(t.data) };
+            if (own) { tx.model = { project: projName, tex: d.src, max: look.modelTexMax || 1024 }; if (nm && d.normal) { tx.model.normal = d.normal; if (d.spec) tx.model.spec = d.spec; } }
+            textures.push(tx);
+            if (nm) {
+                const mp = TEX.maps(id, look.flipGreen), fb = own && !!d.normal;          // (maps made from the picture: only used when the model's own do not come)
+                textures.push({ name: id + '_n', size: mp.size, rgba: b64(mp.normal), usage: 'NORMAL', fallback: fb || undefined }, { name: id + '_s', size: mp.size, rgba: b64(mp.spec), usage: 'SPECULAR', fallback: fb || undefined });
+            }
         });
-        return Object.assign({
+        const out = Object.assign({
             groups: outGroups,
             collision: { mats: built.matList, verts: M.toB64(new Float32Array(verts)), tris: M.toB64(new Int32Array(tris)) },
-            portals: built.portals, textures
+            portals: built.portals, textures, defaultSet: setNames.length ? setNames[0] : undefined, colourSets: setNames
         }, extra.model || {});
+        // the room's timecycle (Paint tab > Timecycle): one of the game's by name, or a modifier of your own written into the resource
+        const tc = look.timecycle || {};
+        if (tc.mode === 'game' && tc.game) out.timecycle = tc.game;
+        else if (tc.mode === 'custom' && tc.vars && Object.keys(tc.vars).length) { const nm = (out.prefix || 'mlo').toLowerCase().replace(/[^a-z0-9_]/g, '') + '_tc'; out.timecycle = nm; out.tcmod = { name: nm, vars: tc.vars }; }
+        return out;
     }
 
     M.Mesher = { build, toExport, stairInfo, stairLanding, OPEN, DIRS };

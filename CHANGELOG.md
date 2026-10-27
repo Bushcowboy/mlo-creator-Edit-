@@ -2,6 +2,13 @@
 
 Changes on the `feature/game-interiors` branch, newest first. Each entry says how it was tested. "Not tested in game" means it compiles and passes the checks listed, but nobody has loaded it in GTA V / FiveM yet: report what breaks and the next push fixes it.
 
+## 2026-10-26 (13) — The ready-to-run program at the top of the repository is current again
+
+- **The `MloCreator.exe` and `ui\` at the top of the repository were still the 1.0 release**, so everything since (the game interiors page and its *Build the list*, the server and world page, picking a building, the guided build, ceilings, columns, props...) was only in `source\`. Both are now rebuilt from `source\`: the exe from `source\src` (built with Mono's compiler under C# 5 rules, the same language level as the Windows build, with the same icon, manifest and version information as before), and `ui\` is a copy of `source\ui`. From now on every push updates both.
+- The program now finds the editor's files with the system's own path separator (it joined them with `\`, which only Windows reads). No change on Windows; it lets the real program be tested on Linux.
+- README: *Run it* says the top folder is the program and that the exe and `ui\` must come from the same download.
+- Tested: the rebuilt exe started as a server (on Linux, with Mono) from a copy of the top folder: every page and script loads (no 404s), *New project* asks the new question, *A game interior* opens the interiors page with the GTA V folder box and *Build the list*, *A building in the game* opens the picker page, and the interiors, server map, game find and prop routes answer. `ui\` is identical to `source\ui`. **Not run on Windows yet** (the window itself, WebView2): if the exe will not start, the Windows build (`source\build.ps1`) makes the same program from the same code.
+
 ## 2026-10-26 (12) — Pick a building in the game, pull it, and a guided build
 
 - **New project now asks what you want to turn into an MLO**: *A building in the game* (new), *A game interior* (the casino, an apartment...), *Building files you already have*, or *A new building from scratch*.
