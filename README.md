@@ -8,7 +8,8 @@ You import the model files of a building (for example a vanilla house), cut door
 
 ## What it does
 
-- **Import** `.ydr` models, `.ytd` textures, `.ybn` collision and `.ymap` files (or look them up in your own GTA V install).
+- **Pick a building in the game**: find it by its model name or coordinates and click it in 3D; its model, textures (with shared parent textures), placement, detail models, collision and occluders are pulled from your GTA V install, and a **guided build** does every step it can (the grid, a first room, doors and windows found by their textures, lights, collision, plants, walk check) and tells you when it needs you.
+- **Import** `.ydr` models, `.ytd` textures, `.ybn` collision and `.ymap` files yourself (or look them up in your own GTA V install).
 - **Frame** the grid onto the building, then **draw rooms**, cut-outs and partitions.
 - **Cut doors, windows and archways** through the model and its collision, like a boolean in Blender.
 - **Door and window models** from your own `.glb` files, placed by hand, including double doors.

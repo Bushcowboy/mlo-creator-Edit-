@@ -409,8 +409,34 @@
         }
         return card;
     }
+    // ---- the steps, one after the other: what is done, what is next, and what the page can do itself ----
+    function steps() {
+        const C = S.combo, L = [], add = (o) => L.push(Object.assign({ need: 'must' }, o)), pairs = C.pieces.length > 1 ? linkedPairs().length : 0;
+        add({ id: 'index', title: 'The list of the game\'s interiors', done: !!S.index.ready, how: 'Type your GTA V folder on the left and read the list (once, a few minutes).', auto: S.index.ready || S.index.busy ? null : () => buildIndex(false) });
+        add({ id: 'pieces', title: 'The interiors you want', done: C.pieces.length > 0, how: 'Search on the left (casino, apartment, office...) and press Add on each piece.' });
+        if (C.pieces.length > 1) add({ id: 'join', title: 'The pieces joined', need: 'should', done: pairs > 0 || !!C.arranged, how: 'Drag a piece so its doorway (amber) meets another\'s, or put them where the game has them.', auto: () => { arrangeAsInGame(); S.combo.arranged = true; } });
+        add({ id: 'place', title: 'Where it stands in the world', done: !!C.placementSet, how: 'Paste the coordinates (vec4) of the spot under "Where it stands in the world".' });
+        add({ id: 'dev', title: 'Your developer name', need: 'should', done: !!S.developer, how: 'Type it under Export: it starts every file name.' });
+        add({ id: 'export', title: 'Export', need: 'final', done: !!S.result && S.result.ok, how: 'Press "Export the resource".' });
+        return L;
+    }
+    async function autopilot() {
+        for (let i = 0; i < 6; i++) { const s = steps().find(x => !x.done && x.need !== 'final'); if (!s || !s.auto) break; await s.auto(); renderAll(); await new Promise(r => setTimeout(r, 200)); if (steps().find(x => x.id === s.id && !x.done && x.need === 'must')) break; }
+        renderAll();
+    }
+    function guideCard(R) {
+        const L = steps(), need = L.filter(s => s.need !== 'final'), done = need.filter(s => s.done).length, nx = L.find(s => !s.done && s.need !== 'final');
+        const card = el('div', { class: 'route' }, el('div', { class: 'rtop' }, el('span', { class: 'rt' }, 'Steps'), el('span', { class: 'rn' }, done + ' of ' + need.length + ' done')), el('div', { class: 'rbar' }, el('i', { style: { width: Math.round(done / Math.max(1, need.length) * 100) + '%' } })));
+        if (nx) {
+            card.append(el('div', { style: { fontWeight: 600 } }, 'Next: ' + nx.title), el('div', { class: 'note' }, nx.how));
+            if (nx.auto) card.append(el('div', { class: 'row' }, el('button', { class: 'btn sm primary', onclick: async () => { await nx.auto(); renderAll(); } }, 'Do it for me'), el('button', { class: 'btn sm', onclick: autopilot }, 'Do every step it can')));
+        } else card.append(el('div', { class: 'note' }, S.result && S.result.ok ? 'Exported. Change anything and export again.' : 'Everything is ready: press "Export the resource" below.'));
+        card.append(el('div', { class: 'note', style: { marginTop: '4px' } }, L.map(s => (s.done ? '✓ ' : (s.need === 'must' ? '✗ ' : (s.need === 'final' ? '→ ' : '! '))) + s.title).join('  ·  ')));
+        R.append(card);
+    }
     function renderRight() {
         const R = $('iright'), C = S.combo, scroll = R.scrollTop; R.innerHTML = '';
+        guideCard(R);
         R.append(el('div', { class: 'h' }, 'Pieces'));
         if (!C.pieces.length) R.append(el('div', { class: 'note' }, 'No interiors yet. Add one from the list on the left.'));
         C.pieces.forEach(p => R.append(pieceCard(p)));

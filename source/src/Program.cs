@@ -580,6 +580,7 @@ namespace MloCreator
                 Reply(c, 200, "{\"ok\":true}", "application/json"); return;
             }
             if (api.StartsWith("interiors/")) { HandleInteriors(c, api.Substring(10), method); return; }
+            if (api.StartsWith("game/")) { HandleGame(c, api.Substring(5), method); return; }
             if (api.StartsWith("area/"))
             {
                 // an area in 3D: the game's buildings, your server's MLOs and the collision of both (a background job)
@@ -631,6 +632,37 @@ namespace MloCreator
         }
 
         // the game's own interiors: build the list (in the background), search it, read one, export a copy or several joined into one
+        // ---- the game itself: where a model stands, pulling a building into a project, a rough map of the city ----
+        static void HandleGame(HttpListenerContext c, string api, string method)
+        {
+            Dictionary<string, object> r = new Dictionary<string, object>(); r["ok"] = true;
+            try
+            {
+                Dictionary<string, object> body = method == "POST" ? Json.DeserializeObject(ReadBody(c)) as Dictionary<string, object> : null;
+                string gta = J.S(J.G(body, "gta"), null); if (string.IsNullOrWhiteSpace(gta)) gta = GtaDefault();
+                if (api == "find" && method == "POST")
+                {
+                    // where the game places a model (the building's name as CodeWalker shows it); with x, y the nearest placements first
+                    Vanilla.Init(gta, Path.Combine(Root, "cache")); object xo = J.G(body, "x");
+                    r["places"] = GamePull.Find(new VanillaFiles(), J.S(J.G(body, "name"), ""), J.S(J.G(body, "ymap"), ""), J.D(xo, 0), J.D(J.G(body, "y"), 0), xo != null, J.I(J.G(body, "max"), 20)); Json200(c, r); return;
+                }
+                if (api == "pull" && method == "POST")
+                {
+                    // a building and everything it needs into a project's files
+                    string proj = SafeName(c.Request.QueryString["name"]); if (proj.Length == 0) throw new Exception("no project name");
+                    Vanilla.Init(gta, Path.Combine(Root, "cache")); Dictionary<string, object> res = GamePull.Run(new VanillaFiles(), ImportHost.FilesDir(proj), body);
+                    foreach (KeyValuePair<string, object> kv in res) r[kv.Key] = kv.Value; r["files"] = ImportHost.List(proj); Json200(c, r); return;
+                }
+                if (api == "mapgrid")
+                {
+                    // a rough map of where the game has things (made in the background: the map index takes a few minutes the first time)
+                    Dictionary<string, object> m = GamePull.MapGrid(gta, Path.Combine(Root, "cache"), method == "POST"); foreach (KeyValuePair<string, object> kv in m) r[kv.Key] = kv.Value; Json200(c, r); return;
+                }
+                Reply(c, 404, "{\"ok\":false,\"error\":\"unknown game call\"}", "application/json");
+            }
+            catch (Exception ex) { r["ok"] = false; r["error"] = ex.Message; Reply(c, 200, Json.Serialize(r), "application/json"); }
+        }
+
         static void HandleInteriors(HttpListenerContext c, string api, string method)
         {
             try

@@ -75,8 +75,12 @@ window.MLO = window.MLO || {};
         for (let x = Math.floor(w0[0] / step) * step; x <= w1[0]; x += step) { const s = toS(x, 0)[0]; g.moveTo(s, 0); g.lineTo(s, c.height); }
         for (let y = Math.floor(w0[1] / step) * step; y <= w1[1]; y += step) { const s = toS(0, y)[1]; g.moveTo(0, s); g.lineTo(c.width, s); }
         g.stroke();
+        // where the game has things (a rough map from its map files), when it was read
+        if (S.grid && S.grid.img) { const G = S.grid, a = toS(G.ox, G.oy + G.h * G.cell), b = toS(G.ox + G.w * G.cell, G.oy); g.imageSmoothingEnabled = S.view.scale < 0.5; g.drawImage(G.img, a[0], a[1], b[0] - a[0], b[1] - a[1]); }
         // the state's outline (roughly): Los Santos and Blaine County lie in x -4000..4500, y -4000..8000
         const a0 = toS(-4000, -4000), a1 = toS(4500, 8000); g.strokeStyle = 'rgba(130,160,210,0.18)'; g.setLineDash([6 * d, 6 * d]); g.strokeRect(a0[0], a1[1], a1[0] - a0[0], a0[1] - a1[1]); g.setLineDash([]);
+        // the places of a building looked up by name
+        (S.pick.places || []).forEach((p, i) => { const s = toS(p.x, p.y); g.strokeStyle = '#e0a43a'; g.lineWidth = 2 * d; g.beginPath(); g.arc(s[0], s[1], 7 * d, 0, Math.PI * 2); g.stroke(); g.fillStyle = '#e0a43a'; g.font = (11 * d) + 'px Segoe UI, sans-serif'; g.fillText(String(i + 1), s[0] + 9 * d, s[1] - 6 * d); });
         if (!S.data) return;
         // the game's interiors: small grey dots
         if (S.showGame) { g.fillStyle = 'rgba(170,180,200,0.45)'; const ds = Math.max(2, 2.5 * d); (S.data.gameInteriors || []).forEach(p => { const s = toS(p[0], p[1]); g.fillRect(s[0] - ds / 2, s[1] - ds / 2, ds, ds); }); }
@@ -128,9 +132,50 @@ window.MLO = window.MLO || {};
         window.addEventListener('resize', resize);
     }
 
+    // ---------- a building in the game: find it by its model name (as CodeWalker shows it) or by coordinates, then pick it in 3D ----------
+    S.pick = { q: '', places: null, busy: false, err: '' };
+    const coordsOf = (q) => { const t = (q || '').replace(/vec(tor)?[234]?/gi, ' ').replace(/[xyzh]\s*=/gi, ' '); if (/[a-df-wyz_]/i.test(t.replace(/e[-+]?\d/gi, ''))) return null; const n = (t.match(/-?\d+(?:\.\d+)?/g) || []).map(Number); return n.length >= 2 ? n : null; };
+    async function findBuilding() {
+        const q = ($('pickq') || {}).value || S.pick.q; S.pick.q = q.trim(); if (!S.pick.q) return;
+        const c = coordsOf(S.pick.q);
+        if (c) { S.pick.places = null; S.pick.err = ''; W.flyTo(c[0], c[1], 120); if (W.open3d) W.open3d(c[0], c[1], c.length > 2 ? c[2] : null, 60, { x: c[0], y: c[1] }); return; }
+        S.pick.busy = true; S.pick.err = ''; S.pick.places = null; renderLeft();
+        const poll = setInterval(async () => { try { const st = await api('vanilla/status'); if (st.status) { S.pick.status = st.status; const e = $('pickst'); if (e) e.textContent = st.status; } } catch (e) { } }, 600);
+        try { const r = await api('game/find', 'POST', { name: S.pick.q.replace(/\.(ydr|yft)$/i, ''), gta: '' }); if (r.ok === false) throw new Error(r.error); S.pick.places = r.places || []; if (!S.pick.places.length) S.pick.err = 'The game\'s map files do not place a model called ' + S.pick.q + '.'; else { const p = S.pick.places[0]; W.flyTo(p.x, p.y, 300); } }
+        catch (e) { S.pick.err = e.message; }
+        clearInterval(poll); S.pick.busy = false; renderAll();
+    }
+    // the rough map of the city: asked for once (the game's map index takes a few minutes the first time)
+    async function loadGrid(start) {
+        try {
+            const r = await api('game/mapgrid', start ? 'POST' : 'GET', start ? { gta: '' } : undefined); S.gridState = r;
+            if (r.ready && r.grid) {
+                const u = atob(r.grid), c = document.createElement('canvas'); c.width = r.w; c.height = r.h; const x = c.getContext('2d'), im = x.createImageData(r.w, r.h);
+                for (let row = 0; row < r.h; row++) for (let col = 0; col < r.w; col++) { const v = u.charCodeAt(row * r.w + col), o = ((r.h - 1 - row) * r.w + col) * 4; if (!v) continue; im.data[o] = 120; im.data[o + 1] = 150; im.data[o + 2] = 200; im.data[o + 3] = Math.min(150, 30 + v * 18); }
+                x.putImageData(im, 0, 0); S.grid = { img: c, ox: r.ox, oy: r.oy, w: r.w, h: r.h, cell: r.cell }; renderAll(); return;
+            }
+            if (r.busy) setTimeout(() => loadGrid(false), 2000);
+            renderLeft();
+        } catch (e) { S.gridState = { error: e.message }; renderLeft(); }
+    }
+    function pickSection(L) {
+        L.append(el('div', { class: 'h' }, 'A building in the game'), el('div', { class: 'note' }, 'Turn one of the game\'s buildings into an interior: type its model name (CodeWalker shows it when you click the building) or the coordinates of the spot, then click the building in the 3D view.'));
+        const inp = el('input', { id: 'pickq', class: 'txt grow', placeholder: 'dt1_02_build1, or 25.7, -1347.3', spellcheck: 'false', value: S.pick.q, onkeydown: (e) => { if (e.key === 'Enter') findBuilding(); } });
+        L.append(el('div', { class: 'row' }, inp, el('button', { class: 'btn sm primary', disabled: S.pick.busy ? true : null, onclick: findBuilding }, 'Find')));
+        if (S.pick.busy) L.append(el('div', { class: 'bar' }, el('div')), el('div', { class: 'note', id: 'pickst' }, S.pick.status || 'Looking in the game\'s map files...'));
+        if (S.pick.err) L.append(el('div', { class: 'note', style: { color: '#f0a4a3' } }, S.pick.err));
+        (S.pick.places || []).forEach((p, i) => L.append(el('div', { class: 'res', style: { '--c': '#e0a43a' }, onclick: () => { if (W.open3d) W.open3d(p.x, p.y, p.z, 60, { name: S.pick.q.replace(/\.(ydr|yft)$/i, '').toLowerCase(), x: p.x, y: p.y }); } },
+            el('div', { class: 't' }, (i + 1) + '. ' + p.x.toFixed(1) + ', ' + p.y.toFixed(1) + ', ' + p.z.toFixed(1)), el('div', { class: 'm' }, p.ymap + ' · click to look in 3D'))));
+        const gs = S.gridState || {};
+        if (!S.grid) L.append(el('div', { class: 'row' }, el('button', { class: 'btn sm', disabled: gs.busy ? true : null, title: 'Draw where the game has buildings on the map (reads the game\'s map files; the first time takes a few minutes)', onclick: () => loadGrid(true) }, gs.busy ? 'Reading the game\'s map...' : 'Show the game\'s map')),
+            gs.busy && gs.status ? el('div', { class: 'note' }, gs.status) : null, gs.error ? el('div', { class: 'note', style: { color: '#f0a4a3' } }, gs.error) : null);
+        else L.append(el('div', { class: 'note' }, 'Click a spot on the map, then "Look in 3D here", to look around for a building.'));
+    }
+
     // ---------- panels ----------
     function renderLeft() {
-        const L = $('wleft'), st = S.status, keep = document.activeElement && document.activeElement.id === 'spath', val = $('spath') ? $('spath').value : null; L.innerHTML = '';
+        const L = $('wleft'), st = S.status, keep = document.activeElement && document.activeElement.id === 'spath', val = $('spath') ? $('spath').value : null, keepPick = document.activeElement && document.activeElement.id === 'pickq'; L.innerHTML = '';
+        if (S.pickFirst) pickSection(L);
         L.append(el('div', { class: 'h' }, 'Your server'), el('div', { class: 'note' }, 'The server\'s resources folder (or one resource). Every resource under it is read; files that are encrypted (asset escrow) are listed and left out.'));
         L.append(el('div', { class: 'row' }, el('input', { id: 'spath', class: 'txt grow', placeholder: 'C:\\FXServer\\server-data\\resources', spellcheck: 'false', value: val != null ? val : (st.root || st.last || '') }), el('button', { class: 'btn sm', onclick: pick, title: 'Pick the folder' }, 'Pick')));
         if (st.busy) L.append(el('div', { class: 'bar' }, el('div')), el('div', { class: 'note' }, st.status || 'Reading...'));
@@ -148,10 +193,13 @@ window.MLO = window.MLO || {};
                         r.mlos.length ? el('span', { class: 'badge good' }, r.mlos.length + ' MLO' + (r.mlos.length > 1 ? 's' : '')) : null, r.places.length ? el('span', { class: 'badge' }, r.places.length + ' placed') : null, el('span', { class: 'badge' }, r.ok + ' files read'))));
             });
         }
+        if (!S.pickFirst) pickSection(L);
         if (keep) { const i = $('spath'); i.focus(); }
+        if (keepPick) { const i = $('pickq'); if (i) { i.focus(); i.selectionStart = i.selectionEnd = i.value.length; } }
     }
     function renderRight() {
         const R = $('wright'); R.innerHTML = '';
+        if (!S.data && S.pickedSpot && W.open3d) R.append(el('div', { class: 'h' }, 'This spot'), el('div', { class: 'note' }, S.pickedSpot.x.toFixed(1) + ', ' + S.pickedSpot.y.toFixed(1)), el('button', { class: 'btn sm primary', onclick: () => W.open3d(S.pickedSpot.x, S.pickedSpot.y, null, 60) }, 'Look in 3D here'));
         if (!S.data) { R.append(el('div', { class: 'h' }, 'What it finds'), el('div', { class: 'note' }, 'Every MLO your resources place, on the map; MLOs whose boxes overlap each other or the game\'s own interiors; archetype names defined by two resources; file names streamed by two resources (only one copy loads); and the files that are encrypted.')); return; }
         // the selected MLO / resource
         if (S.selPlace) {
@@ -195,7 +243,11 @@ window.MLO = window.MLO || {};
     async function start() {
         $('b-back').onclick = () => { try { sessionStorage.setItem('mlo.noauto', '1'); } catch (e) { } location.href = 'index.html'; };
         setInterval(() => { api('ping').catch(() => { }); }, 4000);
-        bindMap(); resize(); renderAll();
+        // world.html?pick=1: the page is opened to pick a building (from the start screen); ?q=name or coordinates looks it up straight away
+        const qs = new URLSearchParams(location.search); S.pickFirst = qs.has('pick') || qs.has('q'); S.projectName = qs.get('project') || '';
+        if (S.pickFirst) { $('toptext').textContent = 'Pick a building of the game to turn into an interior'; $('hint').textContent = 'Find the building by name or coordinates (left), then click it in the 3D view.'; }
+        bindMap(); resize(); renderAll(); loadGrid(false);
+        if (qs.get('q')) { S.pick.q = qs.get('q'); renderLeft(); findBuilding(); }
         try { S.interiors = await api('interiors/status'); } catch (e) { }
         await pollStatus();
         if (S.status.ready) await loadResult();

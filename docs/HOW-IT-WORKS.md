@@ -6,19 +6,21 @@ This is the reference for what each part of the program does and how it is built
 
 1. [Architecture](#architecture)
 2. [Project types](#project-types)
-3. [Workflow for an interior in an imported model](#workflow-for-an-interior-in-an-imported-model)
-4. [Coordinates](#coordinates)
-5. [Cutting the model and its collision](#cutting-the-model-and-its-collision)
-6. [Doors and windows](#doors-and-windows)
-7. [Props and plants](#props-and-plants)
-8. [Several buildings in one project](#several-buildings-in-one-project)
-9. [Export](#export)
-10. [Limits](#limits)
-11. [Whole new building](#whole-new-building)
-12. [The game's own interiors](#the-games-own-interiors)
-13. [Server and world](#server-and-world)
-14. [Controls](#controls)
-15. [Code map](#code-map)
+3. [A building from the game](#a-building-from-the-game)
+4. [The guided build](#the-guided-build)
+5. [Workflow for an interior in an imported model](#workflow-for-an-interior-in-an-imported-model)
+6. [Coordinates](#coordinates)
+7. [Cutting the model and its collision](#cutting-the-model-and-its-collision)
+8. [Doors and windows](#doors-and-windows)
+9. [Props and plants](#props-and-plants)
+10. [Several buildings in one project](#several-buildings-in-one-project)
+11. [Export](#export)
+12. [Limits](#limits)
+13. [Whole new building](#whole-new-building)
+14. [The game's own interiors](#the-games-own-interiors)
+15. [Server and world](#server-and-world)
+16. [Controls](#controls)
+17. [Code map](#code-map)
 
 ## Architecture
 
@@ -32,10 +34,48 @@ Because the UI is served from disk, a change in `ui\` only needs a reload of the
 
 ## Project types
 
+*New project* asks what you want to turn into an MLO:
+
+- **A building in the game.** Find it by its model name or coordinates and click it in 3D; its files are pulled from your game and the guided build does the steps it can. See [A building from the game](#a-building-from-the-game) and [The guided build](#the-guided-build).
+- **A game interior.** The project type *The game's own interiors* below.
+- **Building files you already have**, and **a new building from scratch**: the two types below.
+
 - **Interior in an imported model.** Import the files of a building, cut openings, draw rooms, finish, export. This is the main workflow and is described below.
 - **Whole new building.** Build a house on a grid with walls, rooms, doors, windows, stairs, levels and a roof.
 - **Interior for an existing house (older).** Projects made with the early automatic mode still open and export as they did.
 - **The game's own interiors.** Copy a Rockstar interior (the casino, an apartment, an office...) to any place, or join several into one MLO. See [The game's own interiors](#the-games-own-interiors).
+
+## A building from the game
+
+The Server and world page (start screen > *New project* > *A building in the game*, or the page's *A building in the game* panel) picks one of the game's buildings:
+
+- **Find it** by its model name (CodeWalker shows it when you click the building in its world view) or by coordinates (`25.7, -1347.3`, `vec3(...)`). A name lists every place the game puts that model; click one to look at it in 3D. *Show the game's map* draws where the game has buildings (from its map files; the first time the map index takes a few minutes).
+- **Click the building** in the 3D view of the area: it turns amber, and the panel shows its name, map file, position, size and file size. *Make an interior project from it* opens the editor with a new project named as you like.
+- **The pull** (`game/pull`, `GamePull.cs`, through CodeWalker's library): the model (`.ydr`; a fragment `.yft` or a drawable dictionary `.ydd` is refused with a message); its texture dictionary from its archetype (the block's type file, or the type file the game's model list names) and that dictionary's parents from the game's `gtxd` files, or without an archetype a texture file of its name or the one of its archive with most of its textures; the map file that places it (the placement nearest to where it was picked); its detail models (full-detail models of the block's map files whose name starts like the building's, `dt1_02_...`, and whose box touches the building's; at most 40) with their texture files; the block's collision files that reach the building; the occlusion files with a box near it. Files already in the project are left alone. The project remembers where the building came from.
+- **In the Import tab** the *From the game* box does the same for any project: type the model name, *Find*, *Pull this one*; or *Pull it again* to get what is missing.
+
+## The guided build
+
+The panel at the top of the Import and Build tabs lists every step of an interior in an imported model in order and how far along you are. *Do it for me* does the step shown; *Do every step it can* goes through all of them. At a step only you can do it stops, says *Your turn* with what to do and a button to the tool, and goes on by itself as soon as that step is done. *All steps* lists each one with what the program did.
+
+| Step | What the program does itself |
+|---|---|
+| The building's files | Pulls the building from the game again (when the project came from the game); otherwise you pick a building or import files |
+| Where it stands | The placement in an imported map file (the one nearest to where it was picked), else looks it up in the game's map files |
+| The building, out of the block | Picks the biggest part tall enough for rooms, with what is attached to it (Select building, B, picks another) |
+| The grid | Squares the grid to the walls, on the floor, in the middle of the building |
+| The building's collision | Adds the game's collision files that reach the building |
+| The rooms | One room filling the building: each side on the plane with most wall between 0.3 and 2.2 m, fitted to the walls, the ceiling at the top of the walls. Split it with Partition or draw more rooms |
+| Room edges on the walls | Fit rooms to the walls |
+| Doors and windows | Cuts out the model's faces whose texture says door (door, entrance, shutter) or window (window, glass, win, pane), upright, of a door's or window's size, on a wall of a room (not frames, sills or grilles). Ctrl+Z takes them back |
+| Collision out of the rooms | Turns on clearing the building's collision out of the rooms |
+| Lights | A ceiling light for every 4.5 m of room each way |
+| Plants in the way (optional) | Looks up the map's plants and hides the ones in the rooms |
+| Walk check (optional) | Runs it |
+| Names of the files | Your turn: type your developer name (once, kept for every project) |
+| Export | Your turn: press Export |
+
+The game interiors page shows its own steps (the list of the game's interiors, the interiors you want, joining them, where it stands, your developer name, export) with *Do it for me* where it can.
 
 ## Workflow for an interior in an imported model
 
@@ -212,6 +252,7 @@ Press Export on the Export tab; the folder goes to `output\<folder>` (or the fol
 - Door props are static: wire them to your door script by model and coordinates.
 - Textures that are not in the files you import are shown in plain colours in the editor; the game uses its own.
 - The model's tilt is ignored (only the turn about the vertical is used); the model's scale must be 1.
+- The guided build's first room is one rectangle on the ground floor's walls, and doors and windows are found only by their texture names: check both. Buildings whose model is a fragment (`.yft`) or in a drawable dictionary (`.ydd`) cannot be pulled.
 - Placed props turn about the vertical only and keep their own collision. Which of the game's type files defines a prop comes from the list of the game's models made with the game's interior list: without it, props whose type file is not always loaded may not show (the export says so).
 
 ## Whole new building
@@ -318,5 +359,7 @@ No model, texture or other game file is copied: the entities keep the game's mod
 | `ui\js\look.js` | Paint tab: materials, wall colours, trim, lights, timecycle |
 | `ui\js\structure.js` | Room ceilings (vaulted, barrel, tray, shed), the Column and Beam tools |
 | `ui\js\props.js`, `src\Assets.cs` | The Place props tool, and the models it suggests |
+| `ui\js\guide.js` | The guided build: the steps in order, what the program does itself, the Import tab's *From the game* box |
+| `src\GamePull.cs` | Pulling a building and what it needs from the game (and the rough map of the city) |
 | `ui\world.html`, `ui\js\world.js`, `ui\js\world3d.js` | Server and world: your resources on the map, the area in 3D |
 | `src\Area.cs` | An area in 3D: the game's buildings, your MLOs, and the collision of both |

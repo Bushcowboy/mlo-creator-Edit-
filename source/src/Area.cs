@@ -212,8 +212,21 @@ namespace MloCreator
             {
                 List<object> gl = new List<object>(); Dictionary<int, List<float>> by = new Dictionary<int, List<float>>();
                 foreach (RefTri t in rtris) { List<float> l; if (!by.TryGetValue(t.Group, out l)) by[t.Group] = l = new List<float>(); for (int k = 0; k < 9; k += 3) { l.Add((float)(t.P[k] - c.X)); l.Add((float)(t.P[k + 1] - c.Y)); l.Add((float)(t.P[k + 2] - c.Z)); } }
-                foreach (KeyValuePair<int, List<float>> kv in by) { Dictionary<string, object> g = new Dictionary<string, object>(); g["name"] = groups[kv.Key].Entity; g["color"] = groups[kv.Key].Color; g["pos"] = B64(kv.Value); gl.Add(g); }
-                res["game"] = gl;
+                // the buildings themselves (each placed model once), so one can be picked in the view and pulled into a project
+                List<object> bl = new List<object>(); Dictionary<EntityHit, int> bi = new Dictionary<EntityHit, int>();
+                foreach (KeyValuePair<int, List<float>> kv in by)
+                {
+                    EntityHit eh = groups[kv.Key].Hit; int b = -1;
+                    if (eh != null && !bi.TryGetValue(eh, out b))
+                    {
+                        b = bl.Count; bi[eh] = b; Dictionary<string, object> e = new Dictionary<string, object>(); double hd = 2 * Math.Atan2(eh.Rot.Z, eh.Rot.W) * 180 / Math.PI;
+                        e["name"] = eh.Name; e["ymap"] = eh.Ymap; e["x"] = Math.Round(eh.Pos.X, 3); e["y"] = Math.Round(eh.Pos.Y, 3); e["z"] = Math.Round(eh.Pos.Z, 3); e["heading"] = Math.Round(hd, 3);
+                        e["size"] = new double[] { Math.Round((eh.BMax.X - eh.BMin.X) * (eh.Scale.X == 0 ? 1 : eh.Scale.X), 2), Math.Round((eh.BMax.Y - eh.BMin.Y) * (eh.Scale.X == 0 ? 1 : eh.Scale.X), 2), Math.Round((eh.BMax.Z - eh.BMin.Z) * (eh.Scale.Z == 0 ? 1 : eh.Scale.Z), 2) };
+                        e["kb"] = eh.Ydr != null ? (int)(eh.Ydr.GetFileSize() / 1024) : 0; bl.Add(e);
+                    }
+                    Dictionary<string, object> g = new Dictionary<string, object>(); g["name"] = groups[kv.Key].Entity; g["color"] = groups[kv.Key].Color; g["pos"] = B64(kv.Value); g["b"] = b; gl.Add(g);
+                }
+                res["game"] = gl; res["buildings"] = bl;
             }
 
             // ---- your server: MLOs and map entities in the area ----

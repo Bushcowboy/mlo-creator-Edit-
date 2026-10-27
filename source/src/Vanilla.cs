@@ -23,7 +23,7 @@ namespace MloCreator
         public int Tris = -1, TrisAll;                 // triangles of the prop that lie inside the rooms, and all of them (-1: not counted)
     }
     public class RefTri { public double[] P = new double[9]; public int Group; }
-    public class RefGroup { public string Entity, Texture; public float[] Color = new float[] { 0.62f, 0.60f, 0.56f }; }
+    public class RefGroup { public string Entity, Texture; public EntityHit Hit; public float[] Color = new float[] { 0.62f, 0.60f, 0.56f }; }          // Hit: the placed entity (so a building can be picked in a view)
     public class ColPoly
     {
         public int Kind;                // 0 triangle, 1 box
@@ -123,6 +123,27 @@ namespace MloCreator
                 catch (Exception) { }
             }
             File.WriteAllText(f, sb.ToString()); ymapIdx = list; Status = "";
+        }
+
+        // the map files whose entities reach into a box (world x / y), from the index
+        public static List<string> MapsInBox(double x0, double y0, double x1, double y1)
+        {
+            EnsureYmapIndex(); List<string> l = new List<string>();
+            foreach (YmapInfo yi in ymapIdx) if (x1 >= yi.X0 - 2 && x0 <= yi.X1 + 2 && y1 >= yi.Y0 - 2 && y0 <= yi.Y1 + 2) l.Add(yi.Name);
+            return l;
+        }
+        // A rough picture of where the game's map has things, for the map of the Server and world page: per cell of `cell` metres, how many detailed
+        // map files (narrower than 600 m) cover it, at most 255. ox, oy: the corner of the first cell; w x h cells, row by row from the south.
+        public static byte[] MapDensity(double cell, out double ox, out double oy, out int w, out int h)
+        {
+            EnsureYmapIndex(); ox = -4500; oy = -4500; w = (int)Math.Ceiling(9500 / cell); h = (int)Math.Ceiling(13500 / cell); byte[] g = new byte[w * h];
+            foreach (YmapInfo yi in ymapIdx)
+            {
+                if (yi.X1 - yi.X0 > 600 || yi.Y1 - yi.Y0 > 600) continue;
+                int cx0 = Math.Max(0, (int)((yi.X0 - ox) / cell)), cx1 = Math.Min(w - 1, (int)((yi.X1 - ox) / cell)), cy0 = Math.Max(0, (int)((yi.Y0 - oy) / cell)), cy1 = Math.Min(h - 1, (int)((yi.Y1 - oy) / cell));
+                for (int y = cy0; y <= cy1; y++) for (int x = cx0; x <= cx1; x++) { int i = y * w + x; if (g[i] < 255) g[i]++; }
+            }
+            return g;
         }
 
         // ---------------- finding the map pieces around a point ----------------
@@ -475,7 +496,7 @@ namespace MloCreator
                             wx[i] = w.X; wy[i] = w.Y; wz[i] = w.Z;
                             inside[i] = w.X >= win[0] && w.X <= win[1] && w.Y >= win[2] && w.Y <= win[3] && w.Z >= win[4] && w.Z <= win[5];
                         }
-                        ushort[] idx = g.IndexBuffer.Indices; string gk = eh.Name + "|" + tex; int gi;
+                        ushort[] idx = g.IndexBuffer.Indices; string gk = eh.Name + "|" + Math.Round(eh.Pos.X, 2) + "|" + Math.Round(eh.Pos.Y, 2) + "|" + Math.Round(eh.Pos.Z, 2) + "|" + tex; int gi;          // (one group per placed entity and texture)
                         for (int t = 0; t + 2 < idx.Length; t += 3)
                         {
                             int a = idx[t], b = idx[t + 1], c = idx[t + 2];
@@ -483,7 +504,7 @@ namespace MloCreator
                             if (!(inside[a] && inside[b] && inside[c])) continue;
                             if (!groupIdx.TryGetValue(gk, out gi))
                             {
-                                gi = groups.Count; groupIdx[gk] = gi; RefGroup rg = new RefGroup(); rg.Entity = eh.Name; rg.Texture = tex; groups.Add(rg);
+                                gi = groups.Count; groupIdx[gk] = gi; RefGroup rg = new RefGroup(); rg.Entity = eh.Name; rg.Texture = tex; rg.Hit = eh; groups.Add(rg);
                                 if (tex != "")
                                 {
                                     string ok = eh.YdrOwner.Path; ownerByPath[ok] = eh.YdrOwner; if (!wantByOwner.ContainsKey(ok)) wantByOwner[ok] = new HashSet<string>(); wantByOwner[ok].Add(tex.ToLowerInvariant());

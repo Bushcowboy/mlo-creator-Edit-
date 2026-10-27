@@ -159,6 +159,11 @@ window.MLO = window.MLO || {};
 
     // nothing is opened or created by itself: the start screen lists the projects (unless the user ticked "open the last project automatically")
     async function startProject() {
+        // index.html?gamepull={...}: a building picked in the game (Server and world page): a new project, its files pulled from the game, the guided build
+        try {
+            const gp = new URLSearchParams(location.search).get('gamepull');
+            if (gp && M.Guide) { const spec = JSON.parse(gp); history.replaceState(null, '', location.pathname); await M.Guide.fromGame(spec); return; }
+        } catch (e) { UI.toast('Could not start the project from the game: ' + e.message, 'err'); }
         let name = null, auto = false; try { name = localStorage.getItem('mlo.last'); auto = localStorage.getItem('mlo.autoopen') === '1'; } catch (e) { }
         // (back from the game interiors page: show the project list rather than opening that combination again)
         try { if (sessionStorage.getItem('mlo.noauto') === '1') { sessionStorage.removeItem('mlo.noauto'); auto = false; } } catch (e) { }

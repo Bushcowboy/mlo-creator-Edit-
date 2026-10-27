@@ -236,6 +236,7 @@ window.MLO = window.MLO || {};
 
     UI2.renderImport = function (root) {
         const P = S.project, I = P.import, k = kit();
+        if (M.Guide) M.Guide.importBlock(root);                    // (a building of the game: found by name or picked in 3D, everything it needs pulled)
         // the blocks of the tab; each one goes into a dropdown section at the end, in the order you need them
         const blkFiles = (root) => {
         root.append(el('div', { class: 'note' }, 'Import the model of the building you want to put an interior into: its .ydr, and if you have them its .ytd textures, .ybn collision and the .ymap that places it. Nothing is read from the game unless you press the lookup button below.'));
@@ -805,7 +806,7 @@ window.MLO = window.MLO || {};
         return el('div', { class: 'row', style: { alignItems: 'flex-start', gap: '6px' } }, el('span', { style: { color: col, width: '12px', flex: 'none' } }, mark),
             el('div', { class: 'grow' }, el('div', { style: { color: col } }, s.title), s.done ? null : el('div', { class: 'note' }, s.why)), s.done ? null : el('button', { class: 'btn sm', onclick: () => goStep(s) }, 'Go'));
     }
-    UI2.steps = steps;
+    UI2.steps = steps; UI2.useEntity = (e, src) => useEntity(e, src); UI2.afterFilesChanged = () => afterFilesChanged();
     UI2.renderChecklist = function (root, compact) {
         // the progress counts what is needed; the optional steps (the walk check, picking the building) are listed under "All steps" and never block anything
         const list = steps(), need = list.filter(s => s.sev !== 'opt'), done = need.filter(s => s.done).length, next = list.find(s => !s.done && s.sev !== 'opt');
@@ -975,7 +976,7 @@ window.MLO = window.MLO || {};
     }
 
     UI2.renderLeft = function (root) {
-        if (S.tab === 'import' || S.tab === 'build') UI2.renderChecklist(root, true);
+        if (S.tab === 'import' || S.tab === 'build') { if (M.Guide) M.Guide.render(root); else UI2.renderChecklist(root, true); }
         if (S.tab === 'import') UI2.renderImport(root); else if (S.tab === 'build') UI2.renderBuild(root); else if (S.tab === 'paint') M.VanillaUI.renderPaint(root); else UI2.renderExport(root);
     };
     UI2.refresh = function () { M.UI.renderLeft(); M.UI.renderRight(); };

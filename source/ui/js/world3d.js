@@ -36,7 +36,7 @@ window.MLO = window.MLO || {};
 
     function build() {
         const d = A.data; if (!d || !R) return; const all = [];
-        (d.game || []).forEach(g => { const c = g.color || [0.6, 0.6, 0.6], grey = [0.45 + c[0] * 0.25, 0.45 + c[1] * 0.25, 0.47 + c[2] * 0.25]; all.push(...batches(f32(g.pos), grey, 'game')); });
+        (d.game || []).forEach(g => { if (!g._p) g._p = f32(g.pos); const c = g.color || [0.6, 0.6, 0.6], grey = [0.45 + c[0] * 0.25, 0.45 + c[1] * 0.25, 0.47 + c[2] * 0.25]; all.push(...batches(g._p, grey, 'game')); });
         (d.server || []).forEach(s => all.push(...batches(f32(s.pos), hexRgb(colourOf(s.resource)), 'srv:' + s.resource)));
         R.setBatches(all);
         // the grid at the lowest floor in view (the spot's height is the middle of the MLOs, which would cut through the rooms)
@@ -48,8 +48,49 @@ window.MLO = window.MLO || {};
             if (A.fix && A.fix.res === c.source && A.fix.del.size) { const k = kept(c); tris = k.tris; boxes = k.boxes; }
             R.setStaticLines('col:' + c.source, colLines(tris, boxes), col, true);
         });
-        applyVisibility();
+        applyVisibility(); showPick();
     }
+    // ---- picking one of the game's buildings: it is drawn again on top in amber ----
+    function showPick() {
+        if (!R || !A.data) return; const out = [];
+        if (A.pick != null) (A.data.game || []).forEach(g => { if (g.b === A.pick) out.push(...batches(g._p || (g._p = f32(g.pos)), [1, 0.76, 0.32], 'pick')); });
+        R.setModelBatches(out);
+    }
+    function rayTri(o, d, p, q) {
+        const ax = p[q], ay = p[q + 1], az = p[q + 2], e1x = p[q + 3] - ax, e1y = p[q + 4] - ay, e1z = p[q + 5] - az, e2x = p[q + 6] - ax, e2y = p[q + 7] - ay, e2z = p[q + 8] - az;
+        const hx = d[1] * e2z - d[2] * e2y, hy = d[2] * e2x - d[0] * e2z, hz = d[0] * e2y - d[1] * e2x, a = e1x * hx + e1y * hy + e1z * hz; if (Math.abs(a) < 1e-9) return -1;
+        const f = 1 / a, sx = o[0] - ax, sy = o[1] - ay, sz = o[2] - az, u = f * (sx * hx + sy * hy + sz * hz); if (u < 0 || u > 1) return -1;
+        const qx = sy * e1z - sz * e1y, qy = sz * e1x - sx * e1z, qz = sx * e1y - sy * e1x, v = f * (d[0] * qx + d[1] * qy + d[2] * qz); if (v < 0 || u + v > 1) return -1;
+        return f * (e2x * qx + e2y * qy + e2z * qz);
+    }
+    // the building under the mouse: the nearest triangle of the game's buildings the ray hits
+    function pickBuilding(ray) {
+        let best = null; if (!A.show.game) return null;
+        (A.data.game || []).forEach(g => { if (g.b == null || g.b < 0) return; const p = g._p || (g._p = f32(g.pos)); for (let q = 0; q + 8 < p.length; q += 9) { const t = rayTri(ray.o, ray.d, p, q); if (t > 0.05 && (!best || t < best.t)) best = { t, b: g.b }; } });
+        return best ? best.b : null;
+    }
+    W.pickBuilding = function (b) { A.pick = b; showPick(); render3dPanel(); };
+    // aim the camera at a building (its triangles' middle)
+    function aimAt(b) {
+        let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+        (A.data.game || []).forEach(g => { if (g.b !== b) return; const p = g._p || (g._p = f32(g.pos)); for (let i = 0; i < p.length; i += 3) for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], p[i + k]); mx[k] = Math.max(mx[k], p[i + k]); } });
+        if (mn[0] > 1e8) return; R.camera.target = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2]; R.camera.dist = Math.max(15, Math.hypot(mx[0] - mn[0], mx[1] - mn[1]) * 1.6);
+    }
+    // after loading: the building asked for (by name, or the one nearest to the spot)
+    function autoPick() {
+        const pf = A.pickFor, L = (A.data && A.data.buildings) || []; if (!pf || !L.length) return; const c = A.data.centre; let best = -1, bd = 1e18;
+        L.forEach((b, i) => { if (pf.name && b.name.toLowerCase() !== pf.name) return; const dd = Math.hypot(b.x - pf.x, b.y - pf.y); if (dd < bd) { bd = dd; best = i; } });
+        if (best < 0 && pf.name) W.toast(pf.name + ' is not among the buildings loaded here.', 'warn');
+        if (best >= 0 && (pf.name || bd < 40)) { A.pick = best; aimAt(best); showPick(); }
+        A.pickFor = null;
+    }
+    // a building picked: a new interior project made from it (the editor pulls its files from the game and sets it up)
+    function makeProject(b, name) {
+        const spec = { project: (name || '').trim() || b.name, name: b.name, ymap: b.ymap, x: b.x, y: b.y, z: b.z, heading: b.heading };
+        try { sessionStorage.setItem('mlo.noauto', '1'); } catch (e) { }
+        location.href = 'index.html?gamepull=' + encodeURIComponent(JSON.stringify(spec));
+    }
+    W.makeProject = makeProject;
     function applyVisibility() {
         if (!R || !A.data) return;
         (A.data.collision || []).forEach(c => R.staticOn('col:' + c.source, (c.source === 'the game' ? A.show.colGame : A.show.colServer) && !A.hidden[c.source]));
@@ -130,7 +171,7 @@ window.MLO = window.MLO || {};
         return false;
     };
 
-    const visible = (b) => b.kind === 'game' ? A.show.game : (b.kind.indexOf('srv:') === 0 ? A.show.server && !A.hidden[b.kind.slice(4)] : true);
+    const visible = (b) => b.kind === 'game' || b.kind === 'pick' ? A.show.game : (b.kind.indexOf('srv:') === 0 ? A.show.server && !A.hidden[b.kind.slice(4)] : true);
     function frame() { raf = requestAnimationFrame(frame); if (A.on && R) { overlay(); R.render(visible); } }
 
     function bind(c) {
@@ -141,8 +182,9 @@ window.MLO = window.MLO || {};
             if (drag.b === 0 && !drag.shift) R.camera.orbit(dx, dy); else R.camera.pan(dx, dy);
         });
         window.addEventListener('mouseup', (e) => {
-            const d0 = drag; drag = null; if (!d0 || !A.on || !A.fix || d0.b !== 0 || d0.moved) return;
+            const d0 = drag; drag = null; if (!d0 || !A.on || d0.b !== 0 || d0.moved || !A.data) return;
             const r = c.getBoundingClientRect(), nx = (e.clientX - r.left) / r.width * 2 - 1, ny = 1 - (e.clientY - r.top) / r.height * 2;
+            if (!A.fix) { A.pick = pickBuilding(R.camera.ray(nx, ny)); showPick(); render3dPanel(); return; }          // (a click picks one of the game's buildings)
             const col = (A.data && A.data.collision || []).find(x => x.source === A.fix.res); if (!col) return;
             A.fix.sel = pick(R.camera.ray(nx, ny), col); render3dPanel();
         });
@@ -159,7 +201,8 @@ window.MLO = window.MLO || {};
 
     W.init3d = function () { };
     // open the 3D view on a spot: load the area (a background job on the host), then draw it
-    W.open3d = async function (x, y, z, r) {
+    W.open3d = async function (x, y, z, r, pickFor) {
+        A.pick = null; A.pickFor = pickFor || null;
         A.r = Math.round(Math.max(20, Math.min(300, r || A.r))); A.spot = { x, y, z }; W.S.area = { x, y, r: A.r };
         $('map').style.display = 'none'; $('view3d').style.display = 'block'; $('tip').style.display = 'none'; $('maphud').style.display = 'none'; A.on = true;
         if (!R) {
@@ -180,7 +223,7 @@ window.MLO = window.MLO || {};
                 if (!st.busy) { if (st.error) throw new Error(st.error); break; }
             }
             A.data = await W.api('area/result'); if (A.data && A.data.ok === false) throw new Error(A.data.error);
-            build();
+            build(); autoPick();
         } catch (e) { W.toast(e.message, 'err'); A.err = e.message; }
         A.loading = false; render3dPanel(); W.draw();
     }
@@ -194,6 +237,21 @@ window.MLO = window.MLO || {};
             el('div', { class: 'row' }, el('button', { class: 'btn sm', onclick: W.close3d }, '← Back to the map (Esc)'), el('button', { class: 'btn sm', disabled: A.loading ? true : null, onclick: load }, 'Load again')),
             el('div', { class: 'row' }, el('label', null, 'Radius'), el('input', { type: 'range', class: 'grow', min: '20', max: '300', step: '10', value: String(A.r), oninput: (e) => { e.target.nextSibling.textContent = e.target.value + ' m'; }, onchange: (e) => { A.r = +e.target.value; W.S.area = { x: A.spot.x, y: A.spot.y, r: A.r }; load(); } }), el('span', { class: 'note', style: { margin: 0, width: '44px' } }, A.r + ' m')));
         if (A.loading) { Rt.append(el('div', { class: 'bar' }, el('div')), el('div', { class: 'note', id: 'a3status' }, A.status)); return; }
+        // the building picked, to turn into an interior
+        const B = A.data && A.data.buildings ? A.data.buildings : [];
+        if (A.data && B.length) {
+            const b = A.pick != null ? B[A.pick] : null;
+            Rt.append(el('div', { class: 'h' }, 'Pick a building'));
+            if (!b) Rt.append(el('div', { class: 'note' }, 'Click one of the game\'s buildings (grey) to pick it and turn it into an interior.'));
+            else {
+                const nm = el('input', { class: 'txt grow', value: W.S.projectName || b.name, maxlength: 60, title: 'The name of the new project' });
+                Rt.append(el('div', { class: 'res on', style: { '--c': '#e0a43a', cursor: 'default' } }, el('div', { class: 't' }, b.name), el('div', { class: 'm' }, b.ymap + ' · ' + b.size.map(v => v.toFixed(1)).join(' x ') + ' m' + (b.kb ? ' · ' + b.kb + ' KB' : '')),
+                    el('div', { class: 'm' }, 'at ' + b.x.toFixed(2) + ', ' + b.y.toFixed(2) + ', ' + b.z.toFixed(2) + ' heading ' + b.heading.toFixed(1)),
+                    el('div', { class: 'row', style: { marginTop: '6px' } }, el('label', null, 'Project'), nm),
+                    el('div', { class: 'row wrap' }, el('button', { class: 'btn sm primary', onclick: () => makeProject(b, nm.value) }, 'Make an interior project from it'), el('button', { class: 'btn sm', onclick: () => { if (navigator.clipboard) navigator.clipboard.writeText(b.name).then(() => W.toast('Copied ' + b.name, 'ok')); } }, 'Copy its name')),
+                    el('div', { class: 'note' }, 'The editor opens with the building, its textures, collision, detail models and occluders pulled from the game, and walks you through the rest.')));
+            }
+        }
         Rt.append(el('div', { class: 'h' }, 'Show'), chk('The game\'s buildings (grey)', 'game'), chk('Your resources\' MLOs and maps', 'server'), chk('The game\'s collision (orange lines)', 'colGame'), chk('Your resources\' collision (their colour)', 'colServer'));
         const d = A.data; if (!d) { if (A.err) Rt.append(el('div', { class: 'note', style: { color: '#f0a4a3' } }, A.err)); return; }
         const srcs = {}; (d.server || []).forEach(s => { srcs[s.resource] = srcs[s.resource] || {}; srcs[s.resource].m = s; }); (d.collision || []).forEach(c => { if (c.source !== 'the game') { srcs[c.source] = srcs[c.source] || {}; srcs[c.source].c = c; } });
@@ -230,7 +288,7 @@ window.MLO = window.MLO || {};
         box.append(el('div', { class: 'note' }, 'Your server folder is not changed: the fixed copies go to the output folder. Encrypted files cannot be fixed.'));
         return box;
     }
-    W.render3dPanel = render3dPanel;
+    W.render3dPanel = render3dPanel; W.__cam = () => R && R.camera;          // (tests: where the camera looks)
     // (tests: look straight down at the middle of the resource being fixed)
     W.__aimCamera = function () { const c = A.fix && (A.data.collision || []).find(x => x.source === A.fix.res); if (!c || !R) return; const t = pieces(c).tris; let x = 0, y = 0, z = -1e9, n = 0; for (let i = 0; i < t.length; i += 3) { x += t[i]; y += t[i + 1]; z = Math.max(z, t[i + 2]); n++; } R.camera.target = [x / n, y / n, z]; R.camera.pitch = 1.55; R.camera.dist = 12; };
     // the map's right panel is replaced while the 3D view is open
